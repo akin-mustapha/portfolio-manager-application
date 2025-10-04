@@ -79,14 +79,14 @@
     - Validate edge cases (zero positions, negative returns, missing data)
     - _Requirements: 4.1, 5.1, 6.1, 7.1_
 
-- [-] 5. Implement benchmark comparison service
-  - [-] 5.1 Create benchmark data fetching service
+- [x] 5. Implement benchmark comparison service
+  - [x] 5.1 Create benchmark data fetching service
     - Integrate with market data APIs (Alpha Vantage, Yahoo Finance) for benchmark data
     - Implement caching for benchmark historical data
     - Add support for multiple benchmark indices (S&P 500, FTSE 100, etc.)
     - _Requirements: 8.1, 8.4_
 
-  - [ ] 5.2 Add benchmark comparison calculations
+  - [-] 5.2 Add benchmark comparison calculations
     - Calculate alpha, tracking error, and correlation with benchmarks
     - Implement performance comparison charts data preparation
     - Add benchmark selection and customization functionality

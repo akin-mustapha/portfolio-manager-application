@@ -1,4 +1,4 @@
-from typing import List, Union
+from typing import List, Union, Optional
 from pydantic import AnyHttpUrl, field_validator
 from pydantic_settings import BaseSettings
 
@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     
     # Security
     ALLOWED_HOSTS: List[str] = ["localhost", "127.0.0.1", "0.0.0.0"]
+    
+    # External API Keys
+    ALPHA_VANTAGE_API_KEY: Optional[str] = None
+    YAHOO_FINANCE_ENABLED: bool = True
     
     @field_validator("BACKEND_CORS_ORIGINS", mode="before")
     @classmethod

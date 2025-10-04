@@ -2,26 +2,17 @@ from typing import Any, List, Optional, Dict
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from datetime import datetime, timedelta
 from decimal import Decimal
+import logging
 
 from app.core.deps import get_trading212_api_key, get_current_user_id
+from app.core.config import settings
 from app.services.trading212_service import Trading212Service, Trading212APIError
-from app.models.benchmark import BenchmarkData, BenchmarkComparison
+from app.services.benchmark_service import BenchmarkService, BenchmarkAPIError
+from app.models.benchmark import BenchmarkData, BenchmarkComparison, BenchmarkInfo
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-# Common benchmark indices
-AVAILABLE_BENCHMARKS = {
-    "SPY": {"name": "SPDR S&P 500 ETF", "description": "S&P 500 Index"},
-    "VTI": {"name": "Vanguard Total Stock Market ETF", "description": "Total US Stock Market"},
-    "VXUS": {"name": "Vanguard Total International Stock ETF", "description": "Total International Stock Market"},
-    "VEA": {"name": "Vanguard FTSE Developed Markets ETF", "description": "Developed Markets"},
-    "VWO": {"name": "Vanguard FTSE Emerging Markets ETF", "description": "Emerging Markets"},
-    "BND": {"name": "Vanguard Total Bond Market ETF", "description": "Total Bond Market"},
-    "QQQ": {"name": "Invesco QQQ Trust", "description": "NASDAQ-100 Index"},
-    "IWM": {"name": "iShares Russell 2000 ETF", "description": "Russell 2000 Small Cap"},
-    "EFA": {"name": "iShares MSCI EAFE ETF", "description": "MSCI EAFE Index"},
-    "AGG": {"name": "iShares Core US Aggregate Bond ETF", "description": "US Aggregate Bond Index"}
-}
 
 
 @router.get("/available")
@@ -29,54 +20,81 @@ async def get_available_benchmarks() -> Any:
     """
     Get list of available benchmark indices for comparison
     """
-    benchmarks = []
-    for symbol, info in AVAILABLE_BENCHMARKS.items():
-        benchmarks.append({
-            "symbol": symbol,
-            "name": info["name"],
-            "description": info["description"],
-            "category": _get_benchmark_category(symbol)
-        })
-    
-    return {
-        "benchmarks": benchmarks,
-        "total_count": len(benchmarks)
-    }
+    try:
+        async with BenchmarkService(settings.ALPHA_VANTAGE_API_KEY) as service:
+            supported_benchmarks = service.get_supported_benchmarks()
+            
+            benchmarks = []
+            for symbol, info in supported_benchmarks.items():
+                benchmarks.append({
+                    "symbol": info.symbol,
+                    "name": info.name,
+                    "description": info.description,
+                    "category": info.category
+                })
+            
+            return {
+                "benchmarks": benchmarks,
+                "total_count": len(benchmarks)
+            }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get available benchmarks: {str(e)}"
+        )
 
 
 @router.get("/{benchmark_symbol}/data")
 async def get_benchmark_data(
     benchmark_symbol: str,
-    period: str = Query("1y", regex="^(1d|5d|1m|3m|6m|1y|2y|5y|10y|ytd|max)$", description="Time period for benchmark data"),
+    period: str = Query("1y", regex="^(1d|5d|1mo|3mo|6mo|1y|2y|5y|max)$", description="Time period for benchmark data"),
+    use_cache: bool = Query(True, description="Whether to use cached data"),
     user_id: str = Depends(get_current_user_id)
 ) -> Any:
     """
     Get historical data for a specific benchmark
     """
-    if benchmark_symbol.upper() not in AVAILABLE_BENCHMARKS:
+    try:
+        async with BenchmarkService(settings.ALPHA_VANTAGE_API_KEY) as service:
+            # Check if benchmark is supported
+            benchmark_info = await service.get_benchmark_info(benchmark_symbol.upper())
+            if not benchmark_info:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Benchmark {benchmark_symbol} not available"
+                )
+            
+            # Fetch benchmark data
+            benchmark_data = await service.fetch_benchmark_data(
+                symbol=benchmark_symbol.upper(),
+                period=period,
+                use_cache=use_cache
+            )
+            
+            if not benchmark_data:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail=f"Failed to fetch data for benchmark {benchmark_symbol}"
+                )
+            
+            return benchmark_data.dict()
+            
+    except BenchmarkAPIError as e:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Benchmark {benchmark_symbol} not available"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Benchmark API error: {e.message}"
         )
-    
-    # This would integrate with external market data APIs
-    # For now, return placeholder structure
-    benchmark_info = AVAILABLE_BENCHMARKS[benchmark_symbol.upper()]
-    
-    return {
-        "symbol": benchmark_symbol.upper(),
-        "name": benchmark_info["name"],
-        "description": benchmark_info["description"],
-        "period": period,
-        "data_points": _get_data_points_for_period(period),
-        "message": "Benchmark data endpoint implemented. Integration with market data APIs (Alpha Vantage, Yahoo Finance) required for actual historical data."
-    }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get benchmark data: {str(e)}"
+        )
 
 
 @router.post("/compare")
 async def compare_portfolio_to_benchmark(
     benchmark_symbol: str = Query(..., description="Benchmark symbol to compare against"),
-    period: str = Query("1y", regex="^(1d|5d|1m|3m|6m|1y|2y|5y|10y|ytd|max)$", description="Comparison period"),
+    period: str = Query("1y", regex="^(1d|5d|1mo|3mo|6mo|1y|2y|5y|max)$", description="Comparison period"),
     user_id: str = Depends(get_current_user_id),
     api_key: str = Depends(get_trading212_api_key)
 ) -> Any:
@@ -89,65 +107,37 @@ async def compare_portfolio_to_benchmark(
             detail="Trading 212 API key not configured"
         )
     
-    if benchmark_symbol.upper() not in AVAILABLE_BENCHMARKS:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Benchmark {benchmark_symbol} not available"
-        )
-    
     try:
-        async with Trading212Service() as service:
-            auth_result = await service.authenticate(api_key)
+        async with Trading212Service() as trading_service, BenchmarkService(settings.ALPHA_VANTAGE_API_KEY) as benchmark_service:
+            # Authenticate with Trading 212
+            auth_result = await trading_service.authenticate(api_key)
             if not auth_result.success:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail=f"Trading 212 authentication failed: {auth_result.message}"
                 )
             
-            portfolio = await service.fetch_portfolio_data()
-            benchmark_info = AVAILABLE_BENCHMARKS[benchmark_symbol.upper()]
+            # Fetch portfolio data
+            portfolio = await trading_service.fetch_portfolio_data()
             
-            # Calculate basic comparison metrics
-            # This would be enhanced with actual historical data and financial calculations
-            portfolio_return = float(portfolio.metrics.total_return_pct)
+            # Compare portfolio to benchmark
+            comparison = await benchmark_service.compare_portfolio_to_benchmark(
+                portfolio=portfolio,
+                benchmark_symbol=benchmark_symbol.upper(),
+                period=period
+            )
             
-            # Placeholder benchmark return (would come from market data API)
-            benchmark_return = _get_placeholder_benchmark_return(benchmark_symbol.upper(), period)
-            
-            # Calculate comparison metrics
-            alpha = portfolio_return - benchmark_return
-            tracking_error = abs(alpha)  # Simplified calculation
-            correlation = 0.85  # Placeholder correlation
-            
-            # Determine outperformance
-            outperforming = portfolio_return > benchmark_return
-            
-            return {
-                "comparison_period": period,
-                "benchmark": {
-                    "symbol": benchmark_symbol.upper(),
-                    "name": benchmark_info["name"],
-                    "return_pct": benchmark_return
-                },
-                "portfolio": {
-                    "return_pct": portfolio_return,
-                    "total_value": float(portfolio.metrics.total_value),
-                    "volatility": float(portfolio.metrics.risk_metrics.volatility) if portfolio.metrics.risk_metrics else None
-                },
-                "comparison_metrics": {
-                    "alpha": alpha,
-                    "tracking_error": tracking_error,
-                    "correlation": correlation,
-                    "outperforming": outperforming,
-                    "outperformance_amount": alpha
-                },
-                "message": "Portfolio vs benchmark comparison implemented. Integration with financial calculations engine required for accurate metrics."
-            }
+            return comparison.dict()
             
     except Trading212APIError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Trading 212 API error: {e.message}"
+        )
+    except BenchmarkAPIError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Benchmark API error: {e.message}"
         )
     except Exception as e:
         raise HTTPException(
@@ -160,7 +150,7 @@ async def compare_portfolio_to_benchmark(
 async def compare_pies_to_benchmark(
     benchmark_symbol: str = Query(..., description="Benchmark symbol to compare against"),
     pie_ids: Optional[str] = Query(None, description="Comma-separated list of pie IDs to compare"),
-    period: str = Query("1y", regex="^(1d|5d|1m|3m|6m|1y|2y|5y|10y|ytd|max)$", description="Comparison period"),
+    period: str = Query("1y", regex="^(1d|5d|1mo|3mo|6mo|1y|2y|5y|max)$", description="Comparison period"),
     user_id: str = Depends(get_current_user_id),
     api_key: str = Depends(get_trading212_api_key)
 ) -> Any:
@@ -173,23 +163,18 @@ async def compare_pies_to_benchmark(
             detail="Trading 212 API key not configured"
         )
     
-    if benchmark_symbol.upper() not in AVAILABLE_BENCHMARKS:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Benchmark {benchmark_symbol} not available"
-        )
-    
     try:
-        async with Trading212Service() as service:
-            auth_result = await service.authenticate(api_key)
+        async with Trading212Service() as trading_service, BenchmarkService(settings.ALPHA_VANTAGE_API_KEY) as benchmark_service:
+            # Authenticate with Trading 212
+            auth_result = await trading_service.authenticate(api_key)
             if not auth_result.success:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail=f"Trading 212 authentication failed: {auth_result.message}"
                 )
             
-            portfolio = await service.fetch_portfolio_data()
-            benchmark_info = AVAILABLE_BENCHMARKS[benchmark_symbol.upper()]
+            # Fetch portfolio data
+            portfolio = await trading_service.fetch_portfolio_data()
             
             # Filter pies if specific IDs provided
             pies_to_compare = portfolio.pies
@@ -197,52 +182,39 @@ async def compare_pies_to_benchmark(
                 pie_id_list = [pid.strip() for pid in pie_ids.split(",")]
                 pies_to_compare = [p for p in portfolio.pies if p.id in pie_id_list]
             
-            # Placeholder benchmark return
-            benchmark_return = _get_placeholder_benchmark_return(benchmark_symbol.upper(), period)
-            
             # Compare each pie to benchmark
             pie_comparisons = []
             for pie in pies_to_compare:
-                pie_return = float(pie.metrics.total_return_pct)
-                alpha = pie_return - benchmark_return
-                
-                pie_comparison = {
-                    "pie_id": pie.id,
-                    "pie_name": pie.name,
-                    "pie_return_pct": pie_return,
-                    "pie_value": float(pie.metrics.total_value),
-                    "alpha": alpha,
-                    "outperforming": pie_return > benchmark_return,
-                    "tracking_error": abs(alpha),
-                    "correlation": 0.80  # Placeholder
-                }
-                
-                # Add risk metrics if available
-                if pie.metrics.risk_metrics:
-                    pie_comparison.update({
-                        "volatility": float(pie.metrics.risk_metrics.volatility),
-                        "sharpe_ratio": float(pie.metrics.risk_metrics.sharpe_ratio),
-                        "beta": float(pie.metrics.risk_metrics.beta)
-                    })
-                
-                pie_comparisons.append(pie_comparison)
+                try:
+                    comparison = await benchmark_service.compare_pie_to_benchmark(
+                        pie=pie,
+                        benchmark_symbol=benchmark_symbol.upper(),
+                        period=period
+                    )
+                    pie_comparisons.append(comparison.dict())
+                except Exception as e:
+                    logger.warning(f"Failed to compare pie {pie.name}: {e}")
             
             # Sort by alpha (outperformance)
-            pie_comparisons.sort(key=lambda x: x["alpha"], reverse=True)
+            pie_comparisons.sort(key=lambda x: float(x["alpha"]), reverse=True)
+            
+            # Get benchmark info for response
+            benchmark_info = await benchmark_service.get_benchmark_info(benchmark_symbol.upper())
             
             return {
                 "comparison_period": period,
                 "benchmark": {
                     "symbol": benchmark_symbol.upper(),
-                    "name": benchmark_info["name"],
-                    "return_pct": benchmark_return
+                    "name": benchmark_info.name if benchmark_info else benchmark_symbol,
+                    "description": benchmark_info.description if benchmark_info else ""
                 },
                 "pie_comparisons": pie_comparisons,
                 "summary": {
                     "total_pies": len(pie_comparisons),
                     "outperforming_count": sum(1 for p in pie_comparisons if p["outperforming"]),
                     "best_performer": pie_comparisons[0] if pie_comparisons else None,
-                    "worst_performer": pie_comparisons[-1] if pie_comparisons else None
+                    "worst_performer": pie_comparisons[-1] if pie_comparisons else None,
+                    "average_alpha": sum(float(p["alpha"]) for p in pie_comparisons) / len(pie_comparisons) if pie_comparisons else 0
                 }
             }
             
@@ -251,6 +223,11 @@ async def compare_pies_to_benchmark(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Trading 212 API error: {e.message}"
         )
+    except BenchmarkAPIError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Benchmark API error: {e.message}"
+        )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -258,62 +235,50 @@ async def compare_pies_to_benchmark(
         )
 
 
-@router.get("/custom/create")
+@router.post("/custom/create")
 async def create_custom_benchmark(
     name: str = Query(..., description="Custom benchmark name"),
-    symbols: str = Query(..., description="Comma-separated list of symbols with optional weights (e.g., 'SPY:60,BND:40')"),
+    symbols: str = Query(..., description="Comma-separated list of symbols with optional weights (e.g., 'SPY:60,AGG:40')"),
+    description: Optional[str] = Query(None, description="Optional description for the custom benchmark"),
     user_id: str = Depends(get_current_user_id)
 ) -> Any:
     """
     Create a custom benchmark from multiple indices with specified weights
     """
     try:
-        # Parse symbols and weights
-        benchmark_components = []
-        total_weight = 0
-        
-        for component in symbols.split(","):
-            component = component.strip()
-            if ":" in component:
-                symbol, weight_str = component.split(":")
-                weight = float(weight_str)
-            else:
-                symbol = component
-                weight = 100 / len(symbols.split(","))  # Equal weight if not specified
+        async with BenchmarkService(settings.ALPHA_VANTAGE_API_KEY) as service:
+            # Parse symbols and weights
+            components = []
             
-            symbol = symbol.upper()
-            if symbol not in AVAILABLE_BENCHMARKS:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Symbol {symbol} not available for benchmarking"
-                )
+            for component in symbols.split(","):
+                component = component.strip()
+                if ":" in component:
+                    symbol, weight_str = component.split(":")
+                    weight = float(weight_str)
+                else:
+                    symbol = component
+                    weight = 100 / len(symbols.split(","))  # Equal weight if not specified
+                
+                components.append({
+                    "symbol": symbol.upper(),
+                    "weight": weight
+                })
             
-            benchmark_components.append({
-                "symbol": symbol,
-                "name": AVAILABLE_BENCHMARKS[symbol]["name"],
-                "weight": weight
-            })
-            total_weight += weight
-        
-        # Validate weights sum to 100%
-        if abs(total_weight - 100) > 0.01:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Weights must sum to 100%, got {total_weight}%"
+            # Create custom benchmark
+            custom_benchmark = await service.create_custom_benchmark(
+                name=name,
+                components=components,
+                user_id=user_id,
+                description=description
             )
-        
-        # Create custom benchmark ID
-        custom_benchmark_id = f"custom_{user_id}_{hash(symbols)}".replace("-", "")[:20]
-        
-        return {
-            "benchmark_id": custom_benchmark_id,
-            "name": name,
-            "components": benchmark_components,
-            "total_weight": total_weight,
-            "created_at": datetime.utcnow().isoformat(),
-            "message": "Custom benchmark created. This would be stored for future comparisons in a full implementation."
-        }
-        
+            
+            return custom_benchmark.dict()
+            
+    except BenchmarkAPIError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Benchmark API error: {e.message}"
+        )
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -326,15 +291,16 @@ async def create_custom_benchmark(
         )
 
 
-@router.get("/analysis/correlation")
-async def get_correlation_analysis(
-    benchmark_symbol: str = Query(..., description="Benchmark symbol for correlation analysis"),
-    period: str = Query("1y", regex="^(1d|5d|1m|3m|6m|1y|2y|5y|10y|ytd|max)$", description="Analysis period"),
+@router.post("/analysis/comprehensive")
+async def get_comprehensive_benchmark_analysis(
+    benchmark_symbol: str = Query(..., description="Benchmark symbol for analysis"),
+    period: str = Query("1y", regex="^(1d|5d|1mo|3mo|6mo|1y|2y|5y|max)$", description="Analysis period"),
+    include_pies: bool = Query(True, description="Whether to include pie comparisons"),
     user_id: str = Depends(get_current_user_id),
     api_key: str = Depends(get_trading212_api_key)
 ) -> Any:
     """
-    Get correlation analysis between portfolio/pies and benchmark
+    Get comprehensive benchmark analysis for portfolio and pies
     """
     if not api_key:
         raise HTTPException(
@@ -342,65 +308,84 @@ async def get_correlation_analysis(
             detail="Trading 212 API key not configured"
         )
     
-    if benchmark_symbol.upper() not in AVAILABLE_BENCHMARKS:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Benchmark {benchmark_symbol} not available"
-        )
-    
     try:
-        async with Trading212Service() as service:
-            auth_result = await service.authenticate(api_key)
+        async with Trading212Service() as trading_service, BenchmarkService(settings.ALPHA_VANTAGE_API_KEY) as benchmark_service:
+            # Authenticate with Trading 212
+            auth_result = await trading_service.authenticate(api_key)
             if not auth_result.success:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail=f"Trading 212 authentication failed: {auth_result.message}"
                 )
             
-            portfolio = await service.fetch_portfolio_data()
-            benchmark_info = AVAILABLE_BENCHMARKS[benchmark_symbol.upper()]
+            # Fetch portfolio data
+            portfolio = await trading_service.fetch_portfolio_data()
             
-            # Calculate correlation metrics for portfolio and each pie
-            portfolio_correlation = {
-                "entity_type": "portfolio",
-                "entity_id": portfolio.id,
-                "entity_name": portfolio.name,
-                "correlation": 0.85,  # Placeholder
-                "beta": 1.1,  # Placeholder
-                "r_squared": 0.72,  # Placeholder
-                "tracking_error": 2.5  # Placeholder
-            }
+            # Perform comprehensive analysis
+            analysis = await benchmark_service.compare_multiple_entities_to_benchmark(
+                portfolio=portfolio,
+                benchmark_symbol=benchmark_symbol.upper(),
+                period=period,
+                include_pies=include_pies
+            )
             
-            pie_correlations = []
-            for pie in portfolio.pies:
-                pie_correlation = {
-                    "entity_type": "pie",
-                    "entity_id": pie.id,
-                    "entity_name": pie.name,
-                    "correlation": 0.75 + (hash(pie.id) % 20) / 100,  # Placeholder with variation
-                    "beta": 0.9 + (hash(pie.id) % 40) / 100,  # Placeholder with variation
-                    "r_squared": 0.60 + (hash(pie.id) % 30) / 100,  # Placeholder with variation
-                    "tracking_error": 1.5 + (hash(pie.id) % 30) / 10  # Placeholder with variation
-                }
-                pie_correlations.append(pie_correlation)
+            return analysis.dict()
             
-            # Sort pies by correlation
-            pie_correlations.sort(key=lambda x: x["correlation"], reverse=True)
+    except Trading212APIError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Trading 212 API error: {e.message}"
+        )
+    except BenchmarkAPIError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Benchmark API error: {e.message}"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to perform comprehensive analysis: {str(e)}"
+        )
+
+
+@router.get("/recommendations")
+async def get_benchmark_recommendations(
+    user_id: str = Depends(get_current_user_id),
+    api_key: str = Depends(get_trading212_api_key)
+) -> Any:
+    """
+    Get benchmark recommendations based on portfolio composition
+    """
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Trading 212 API key not configured"
+        )
+    
+    try:
+        async with Trading212Service() as trading_service, BenchmarkService(settings.ALPHA_VANTAGE_API_KEY) as benchmark_service:
+            # Authenticate with Trading 212
+            auth_result = await trading_service.authenticate(api_key)
+            if not auth_result.success:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail=f"Trading 212 authentication failed: {auth_result.message}"
+                )
+            
+            # Fetch portfolio data
+            portfolio = await trading_service.fetch_portfolio_data()
+            
+            # Get recommendations
+            recommendations = await benchmark_service.get_benchmark_selection_recommendations(portfolio)
             
             return {
-                "analysis_period": period,
-                "benchmark": {
-                    "symbol": benchmark_symbol.upper(),
-                    "name": benchmark_info["name"]
-                },
-                "portfolio_correlation": portfolio_correlation,
-                "pie_correlations": pie_correlations,
-                "summary": {
-                    "highest_correlation": pie_correlations[0] if pie_correlations else None,
-                    "lowest_correlation": pie_correlations[-1] if pie_correlations else None,
-                    "average_correlation": sum(p["correlation"] for p in pie_correlations) / len(pie_correlations) if pie_correlations else 0
-                },
-                "message": "Correlation analysis implemented. Integration with financial calculations engine required for accurate correlation metrics."
+                "recommendations": [rec.dict() for rec in recommendations],
+                "total_count": len(recommendations),
+                "portfolio_summary": {
+                    "total_value": float(portfolio.metrics.total_value),
+                    "pie_count": len(portfolio.pies),
+                    "individual_positions": len(portfolio.individual_positions)
+                }
             }
             
     except Trading212APIError as e:
@@ -408,80 +393,391 @@ async def get_correlation_analysis(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Trading 212 API error: {e.message}"
         )
+    except BenchmarkAPIError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Benchmark API error: {e.message}"
+        )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to perform correlation analysis: {str(e)}"
+            detail=f"Failed to get benchmark recommendations: {str(e)}"
         )
 
 
-def _get_benchmark_category(symbol: str) -> str:
-    """Get category for benchmark symbol"""
-    categories = {
-        "SPY": "US Equity",
-        "VTI": "US Equity",
-        "QQQ": "US Equity",
-        "IWM": "US Equity",
-        "VXUS": "International Equity",
-        "VEA": "International Equity",
-        "VWO": "Emerging Markets",
-        "EFA": "International Equity",
-        "BND": "Fixed Income",
-        "AGG": "Fixed Income"
-    }
-    return categories.get(symbol, "Other")
+@router.get("/search")
+async def search_benchmarks(
+    query: str = Query(..., description="Search query for benchmarks"),
+    user_id: str = Depends(get_current_user_id)
+) -> Any:
+    """
+    Search for benchmarks by name, symbol, or description
+    """
+    try:
+        async with BenchmarkService(settings.ALPHA_VANTAGE_API_KEY) as service:
+            matches = await service.search_benchmarks(query)
+            
+            return {
+                "query": query,
+                "matches": [match.dict() for match in matches],
+                "total_count": len(matches)
+            }
+            
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to search benchmarks: {str(e)}"
+        )
 
 
-def _get_data_points_for_period(period: str) -> int:
-    """Get number of data points for a given period"""
-    data_points = {
-        "1d": 24,
-        "5d": 5,
-        "1m": 30,
-        "3m": 90,
-        "6m": 180,
-        "1y": 365,
-        "2y": 104,  # Weekly
-        "5y": 260,  # Weekly
-        "10y": 520,  # Weekly
-        "ytd": 250,
-        "max": 1000
-    }
-    return data_points.get(period, 365)
-
-
-def _get_placeholder_benchmark_return(symbol: str, period: str) -> float:
-    """Get placeholder benchmark return for demonstration"""
-    # Placeholder returns based on typical market performance
-    base_returns = {
-        "SPY": 10.5,
-        "VTI": 11.2,
-        "QQQ": 15.8,
-        "IWM": 8.9,
-        "VXUS": 7.3,
-        "VEA": 6.8,
-        "VWO": 5.2,
-        "EFA": 6.5,
-        "BND": 2.1,
-        "AGG": 1.8
-    }
+@router.get("/chart-data/{benchmark_symbol}")
+async def get_benchmark_chart_data(
+    benchmark_symbol: str,
+    period: str = Query("1y", regex="^(1d|5d|1mo|3mo|6mo|1y|2y|5y|max)$", description="Time period"),
+    entity_type: str = Query("portfolio", regex="^(portfolio|pie)$", description="Entity type to compare"),
+    entity_id: Optional[str] = Query(None, description="Entity ID (required for pie comparison)"),
+    user_id: str = Depends(get_current_user_id),
+    api_key: str = Depends(get_trading212_api_key)
+) -> Any:
+    """
+    Get chart data for benchmark comparison visualization
+    """
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Trading 212 API key not configured"
+        )
     
-    # Adjust for period
-    period_multipliers = {
-        "1d": 0.03,
-        "5d": 0.15,
-        "1m": 0.8,
-        "3m": 2.5,
-        "6m": 5.0,
-        "1y": 1.0,
-        "2y": 2.1,
-        "5y": 5.5,
-        "10y": 11.2,
-        "ytd": 0.7,
-        "max": 8.5
-    }
+    try:
+        async with Trading212Service() as trading_service, BenchmarkService(settings.ALPHA_VANTAGE_API_KEY) as benchmark_service:
+            # Authenticate with Trading 212
+            auth_result = await trading_service.authenticate(api_key)
+            if not auth_result.success:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail=f"Trading 212 authentication failed: {auth_result.message}"
+                )
+            
+            # Fetch portfolio data
+            portfolio = await trading_service.fetch_portfolio_data()
+            
+            # Fetch benchmark data
+            benchmark_data = await benchmark_service.fetch_benchmark_data(
+                symbol=benchmark_symbol.upper(),
+                period=period
+            )
+            
+            if not benchmark_data:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail=f"Failed to fetch benchmark data for {benchmark_symbol}"
+                )
+            
+            # Prepare entity returns based on type
+            if entity_type == "portfolio":
+                entity_returns = benchmark_service._calculate_portfolio_returns_series(portfolio, period)
+                entity_name = portfolio.name
+            else:  # pie
+                if not entity_id:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Entity ID required for pie comparison"
+                    )
+                
+                pie = next((p for p in portfolio.pies if p.id == entity_id), None)
+                if not pie:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail=f"Pie with ID {entity_id} not found"
+                    )
+                
+                entity_returns = benchmark_service._calculate_pie_returns_series(pie, period)
+                entity_name = pie.name
+            
+            # Prepare chart data
+            chart_data = await benchmark_service.prepare_performance_comparison_chart_data(
+                entity_returns=entity_returns,
+                benchmark_data=benchmark_data,
+                entity_name=entity_name
+            )
+            
+            return chart_data
+            
+    except Trading212APIError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Trading 212 API error: {e.message}"
+        )
+    except BenchmarkAPIError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Benchmark API error: {e.message}"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get chart data: {str(e)}"
+        )
+
+
+@router.delete("/cache")
+async def clear_benchmark_cache(
+    symbol: Optional[str] = Query(None, description="Specific symbol to clear, or all if not provided"),
+    user_id: str = Depends(get_current_user_id)
+) -> Any:
+    """
+    Clear benchmark data cache
+    """
+    try:
+        async with BenchmarkService(settings.ALPHA_VANTAGE_API_KEY) as service:
+            await service.clear_benchmark_cache(symbol)
+            
+            return {
+                "message": f"Cache cleared for {'all benchmarks' if not symbol else symbol}",
+                "cleared_symbol": symbol
+            }
+            
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to clear cache: {str(e)}"
+        )
+
+
+@router.post("/compare/advanced")
+async def get_advanced_benchmark_comparison(
+    benchmark_symbol: str = Query(..., description="Benchmark symbol to compare against"),
+    entity_type: str = Query("portfolio", regex="^(portfolio|pie)$", description="Entity type to compare"),
+    entity_id: Optional[str] = Query(None, description="Entity ID (required for pie comparison)"),
+    period: str = Query("1y", regex="^(1d|5d|1mo|3mo|6mo|1y|2y|5y|max)$", description="Comparison period"),
+    user_id: str = Depends(get_current_user_id),
+    api_key: str = Depends(get_trading212_api_key)
+) -> Any:
+    """
+    Get advanced benchmark comparison with additional metrics like Treynor ratio, Jensen's alpha, etc.
+    """
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Trading 212 API key not configured"
+        )
     
-    base_return = base_returns.get(symbol, 8.0)
-    multiplier = period_multipliers.get(period, 1.0)
+    try:
+        async with Trading212Service() as trading_service, BenchmarkService(settings.ALPHA_VANTAGE_API_KEY) as benchmark_service:
+            # Authenticate with Trading 212
+            auth_result = await trading_service.authenticate(api_key)
+            if not auth_result.success:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail=f"Trading 212 authentication failed: {auth_result.message}"
+                )
+            
+            # Fetch portfolio data
+            portfolio = await trading_service.fetch_portfolio_data()
+            
+            # Fetch benchmark data
+            benchmark_data = await benchmark_service.fetch_benchmark_data(
+                symbol=benchmark_symbol.upper(),
+                period=period
+            )
+            
+            if not benchmark_data:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail=f"Failed to fetch benchmark data for {benchmark_symbol}"
+                )
+            
+            # Get entity returns and name
+            if entity_type == "portfolio":
+                entity_returns = benchmark_service._calculate_portfolio_returns_series(portfolio, period)
+                entity_name = portfolio.name
+            else:  # pie
+                if not entity_id:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Entity ID required for pie comparison"
+                    )
+                
+                pie = next((p for p in portfolio.pies if p.id == entity_id), None)
+                if not pie:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail=f"Pie with ID {entity_id} not found"
+                    )
+                
+                entity_returns = benchmark_service._calculate_pie_returns_series(pie, period)
+                entity_name = pie.name
+            
+            # Get benchmark returns
+            benchmark_returns = benchmark_service._calculate_returns_series(benchmark_data.data_points)
+            
+            # Calculate basic comparison
+            basic_comparison = await benchmark_service.calculate_benchmark_comparison(
+                entity_returns=entity_returns,
+                benchmark_data=benchmark_data,
+                entity_type=entity_type,
+                entity_id=entity_id or portfolio.id,
+                entity_name=entity_name
+            )
+            
+            # Calculate advanced metrics
+            advanced_metrics = await benchmark_service.get_advanced_comparison_metrics(
+                entity_returns=entity_returns,
+                benchmark_returns=benchmark_returns,
+                entity_name=entity_name,
+                benchmark_name=benchmark_data.name
+            )
+            
+            return {
+                "basic_comparison": basic_comparison.dict(),
+                "advanced_metrics": advanced_metrics,
+                "analysis_timestamp": datetime.utcnow().isoformat()
+            }
+            
+    except Trading212APIError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Trading 212 API error: {e.message}"
+        )
+    except BenchmarkAPIError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Benchmark API error: {e.message}"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get advanced comparison: {str(e)}"
+        )
+
+
+@router.post("/custom/{custom_benchmark_id}/compare")
+async def compare_to_custom_benchmark(
+    custom_benchmark_id: str,
+    entity_type: str = Query("portfolio", regex="^(portfolio|pie)$", description="Entity type to compare"),
+    entity_id: Optional[str] = Query(None, description="Entity ID (required for pie comparison)"),
+    period: str = Query("1y", regex="^(1d|5d|1mo|3mo|6mo|1y|2y|5y|max)$", description="Comparison period"),
+    user_id: str = Depends(get_current_user_id),
+    api_key: str = Depends(get_trading212_api_key)
+) -> Any:
+    """
+    Compare portfolio or pie performance against a custom benchmark
+    """
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Trading 212 API key not configured"
+        )
     
-    return base_return * multiplier
+    try:
+        async with Trading212Service() as trading_service, BenchmarkService(settings.ALPHA_VANTAGE_API_KEY) as benchmark_service:
+            # Authenticate with Trading 212
+            auth_result = await trading_service.authenticate(api_key)
+            if not auth_result.success:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail=f"Trading 212 authentication failed: {auth_result.message}"
+                )
+            
+            # Fetch portfolio data
+            portfolio = await trading_service.fetch_portfolio_data()
+            
+            # Get custom benchmark from cache
+            cache_key = f"custom_benchmark:{custom_benchmark_id}"
+            cached_data = await benchmark_service._get_cached_data(cache_key)
+            
+            if not cached_data:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Custom benchmark {custom_benchmark_id} not found"
+                )
+            
+            from app.models.benchmark import CustomBenchmark
+            custom_benchmark = CustomBenchmark(**cached_data)
+            
+            # Calculate custom benchmark data
+            custom_benchmark_data = await benchmark_service.calculate_custom_benchmark_data(
+                custom_benchmark, period
+            )
+            
+            # Get entity returns and name
+            if entity_type == "portfolio":
+                entity_returns = benchmark_service._calculate_portfolio_returns_series(portfolio, period)
+                entity_name = portfolio.name
+            else:  # pie
+                if not entity_id:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Entity ID required for pie comparison"
+                    )
+                
+                pie = next((p for p in portfolio.pies if p.id == entity_id), None)
+                if not pie:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail=f"Pie with ID {entity_id} not found"
+                    )
+                
+                entity_returns = benchmark_service._calculate_pie_returns_series(pie, period)
+                entity_name = pie.name
+            
+            # Calculate comparison
+            comparison = await benchmark_service.calculate_benchmark_comparison(
+                entity_returns=entity_returns,
+                benchmark_data=custom_benchmark_data,
+                entity_type=entity_type,
+                entity_id=entity_id or portfolio.id,
+                entity_name=entity_name
+            )
+            
+            return {
+                "comparison": comparison.dict(),
+                "custom_benchmark": custom_benchmark.dict(),
+                "custom_benchmark_performance": {
+                    "total_return_pct": float(custom_benchmark_data.total_return_pct),
+                    "annualized_return_pct": float(custom_benchmark_data.annualized_return_pct),
+                    "volatility": float(custom_benchmark_data.volatility),
+                    "sharpe_ratio": float(custom_benchmark_data.sharpe_ratio)
+                }
+            }
+            
+    except Trading212APIError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Trading 212 API error: {e.message}"
+        )
+    except BenchmarkAPIError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Benchmark API error: {e.message}"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to compare to custom benchmark: {str(e)}"
+        )
+
+
+@router.get("/health")
+async def get_benchmark_service_health() -> Any:
+    """
+    Check the health of benchmark data sources
+    """
+    try:
+        async with BenchmarkService(settings.ALPHA_VANTAGE_API_KEY) as service:
+            health_status = await service.health_check()
+            
+            return {
+                "status": "healthy" if any(source["available"] for source in health_status.values()) else "unhealthy",
+                "data_sources": health_status,
+                "timestamp": datetime.utcnow().isoformat()
+            }
+            
+    except Exception as e:
+        return {
+            "status": "unhealthy",
+            "error": str(e),
+            "timestamp": datetime.utcnow().isoformat()
+        }
+
+
