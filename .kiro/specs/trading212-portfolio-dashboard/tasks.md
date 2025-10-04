@@ -49,26 +49,26 @@
     - Test error handling scenarios (invalid credentials, rate limits)
     - _Requirements: 2.1, 2.2, 3.1_
 
-- [-] 4. Create financial calculations engine
-  - [-] 4.1 Implement portfolio-level metrics calculations
+- [x] 4. Create financial calculations engine
+  - [x] 4.1 Implement portfolio-level metrics calculations
     - Calculate total value, invested amount, returns, and annualized returns
     - Implement volatility, Sharpe ratio, and maximum drawdown calculations using pandas/numpy
     - Add beta calculation against benchmark indices
     - _Requirements: 4.1, 4.2, 4.3, 4.4, 5.1, 5.2, 5.3, 5.4_
 
-  - [ ] 4.2 Implement pie-level performance calculations
+  - [-] 4.2 Implement pie-level performance calculations
     - Calculate pie-specific metrics (value, returns, contribution to portfolio)
     - Implement time-weighted return calculations for fair comparison
     - Add pie risk metrics (volatility, beta vs portfolio, Sharpe ratio)
     - _Requirements: 9.1, 9.2, 9.3, 9.4, 10.1, 10.2, 10.3, 10.4_
 
-  - [ ] 4.3 Add allocation and diversification analysis
+  - [x] 4.3 Add allocation and diversification analysis
     - Implement sector, industry, and geographical breakdown calculations
     - Calculate diversification scores and concentration risk metrics
     - Add top holdings analysis and allocation drift detection
     - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 12.1, 12.2, 12.3, 12.4_
 
-  - [ ] 4.4 Implement dividend and income analysis
+  - [x] 4.4 Implement dividend and income analysis
     - Calculate dividend yields, total dividends, and income projections
     - Track reinvested vs withdrawn dividends at portfolio and pie levels
     - Add monthly dividend history and trend analysis

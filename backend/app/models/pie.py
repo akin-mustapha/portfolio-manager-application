@@ -4,7 +4,7 @@ Pie models for Trading 212 pie investments.
 
 from datetime import datetime
 from decimal import Decimal
-from typing import List, Optional
+from typing import List, Optional, Dict
 from pydantic import BaseModel, Field, validator
 from .position import Position
 from .risk import RiskMetrics
@@ -15,7 +15,7 @@ class PieMetrics(BaseModel):
     
     # Value metrics
     total_value: Decimal = Field(..., ge=0, description="Current total value of the pie")
-    invested_amount: Decimal = Field(..., ge=0, description="Total amount invested in the pie")
+    total_invested: Decimal = Field(..., ge=0, description="Total amount invested in the pie")
     cash_balance: Decimal = Field(default=Decimal('0'), ge=0, description="Uninvested cash in pie")
     
     # Return metrics
@@ -31,10 +31,20 @@ class PieMetrics(BaseModel):
     # Dividend metrics
     total_dividends: Decimal = Field(default=Decimal('0'), ge=0, description="Total dividends received")
     dividend_yield: Decimal = Field(default=Decimal('0'), ge=0, description="Current dividend yield")
+    annual_dividend_projection: Decimal = Field(default=Decimal('0'), ge=0, description="Projected annual dividends")
     monthly_dividend_avg: Decimal = Field(default=Decimal('0'), ge=0, description="Average monthly dividends")
+    
+    # Allocation metrics
+    sector_allocation: Dict[str, Decimal] = Field(default_factory=dict, description="Allocation by sector")
+    country_allocation: Dict[str, Decimal] = Field(default_factory=dict, description="Allocation by country")
+    asset_type_allocation: Dict[str, Decimal] = Field(default_factory=dict, description="Allocation by asset type")
     
     # Risk metrics
     risk_metrics: Optional[RiskMetrics] = Field(None, description="Risk analysis for the pie")
+    beta_vs_portfolio: Optional[Decimal] = Field(None, description="Beta vs portfolio")
+    
+    # Holdings
+    top_holdings: List[str] = Field(default_factory=list, description="Top holdings symbols")
     
     class Config:
         """Pydantic configuration."""
