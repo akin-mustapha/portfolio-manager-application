@@ -8,14 +8,14 @@
   - Create basic FastAPI application with CORS and middleware setup
   - _Requirements: 1.1, 1.2, 1.3_
 
-- [ ] 2. Implement core data models and validation
-  - [ ] 2.1 Create Pydantic models for portfolio data structures
+- [-] 2. Implement core data models and validation
+  - [x] 2.1 Create Pydantic models for portfolio data structures
     - Define Portfolio, Pie, Position, and metrics models with proper validation
     - Implement AssetType and RiskCategory enums
     - Add datetime handling and serialization methods
     - _Requirements: 3.1, 3.2, 4.1, 9.1_
 
-  - [ ] 2.2 Set up database models with SQLAlchemy
+  - [-] 2.2 Set up database models with SQLAlchemy
     - Create database tables for portfolios, pies, positions, and historical data
     - Implement relationships between models (portfolio -> pies -> positions)
     - Add database migration setup with Alembic

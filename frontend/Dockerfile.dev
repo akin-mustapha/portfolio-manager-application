@@ -2,8 +2,12 @@ FROM node:18-alpine
 
 WORKDIR /app
 
+# Install dependencies for node-gyp
+RUN apk add --no-cache python3 make g++
+
 # Copy package files
-COPY package*.json ./
+COPY package.json ./
+COPY package-lock.json* ./
 
 # Install dependencies
 RUN npm install
