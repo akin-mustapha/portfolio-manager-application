@@ -1,5 +1,15 @@
 import axios from 'axios';
-import { ApiResponse, ApiError } from '../types/api';
+import { 
+  ApiResponse, 
+  ApiError,
+  SessionCreate, 
+  SessionResponse, 
+  TokenRefresh, 
+  TokenResponse, 
+  Trading212APISetup, 
+  Trading212APIResponse, 
+  APIKeyValidation 
+} from '../types/api';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
@@ -18,9 +28,9 @@ apiClient.interceptors.request.use(
     const authData = localStorage.getItem('trading212_auth');
     if (authData) {
       try {
-        const { apiKey } = JSON.parse(authData);
-        if (apiKey) {
-          config.headers['X-API-Key'] = apiKey;
+        const { accessToken } = JSON.parse(authData);
+        if (accessToken) {
+          config.headers['Authorization'] = `Bearer ${accessToken}`;
         }
       } catch (error) {
         console.warn('Failed to parse auth data:', error);
@@ -33,23 +43,58 @@ apiClient.interceptors.request.use(
   }
 );
 
-// Response interceptor for handling errors
+// Response interceptor for handling errors and token refresh
 apiClient.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
+    const originalRequest = error.config;
+    
+    // Handle 401 errors with token refresh
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+      
+      const authData = localStorage.getItem('trading212_auth');
+      if (authData) {
+        try {
+          const { refreshToken } = JSON.parse(authData);
+          if (refreshToken) {
+            // Try to refresh the token
+            const refreshResponse = await apiClient.post('/auth/refresh', {
+              refresh_token: refreshToken
+            });
+            
+            if (refreshResponse.data.data) {
+              const { access_token, expires_in } = refreshResponse.data.data;
+              
+              // Update stored auth data
+              const updatedAuth = {
+                ...JSON.parse(authData),
+                accessToken: access_token,
+                tokenExpiresAt: new Date(Date.now() + expires_in * 1000)
+              };
+              localStorage.setItem('trading212_auth', JSON.stringify(updatedAuth));
+              
+              // Retry original request with new token
+              originalRequest.headers['Authorization'] = `Bearer ${access_token}`;
+              return apiClient(originalRequest);
+            }
+          }
+        } catch (refreshError) {
+          console.warn('Token refresh failed:', refreshError);
+        }
+      }
+      
+      // If refresh fails, clear auth and emit error
+      localStorage.removeItem('trading212_auth');
+      window.dispatchEvent(new CustomEvent('auth-error'));
+    }
+
     const apiError: ApiError = {
-      message: error.response?.data?.message || error.message || 'An unexpected error occurred',
+      message: error.response?.data?.detail || error.response?.data?.message || error.message || 'An unexpected error occurred',
       code: error.response?.data?.code || error.code,
       status: error.response?.status,
       details: error.response?.data?.details,
     };
-
-    // Handle specific error cases
-    if (error.response?.status === 401) {
-      // Clear auth data on unauthorized
-      localStorage.removeItem('trading212_auth');
-      window.dispatchEvent(new CustomEvent('auth-error'));
-    }
 
     return Promise.reject(apiError);
   }
@@ -70,11 +115,34 @@ export const api = {
     apiClient.delete(url).then((response) => response.data),
 };
 
+
+
 // Specific API service functions
 export const apiService = {
-  // Authentication
-  validateApiKey: async (apiKey: string): Promise<ApiResponse<{ valid: boolean }>> => {
-    return api.post('/auth/validate', { api_key: apiKey });
+  // Session Management
+  createSession: async (sessionData: SessionCreate): Promise<ApiResponse<SessionResponse>> => {
+    return api.post('/auth/session', sessionData);
+  },
+
+  refreshToken: async (tokenData: TokenRefresh): Promise<ApiResponse<TokenResponse>> => {
+    return api.post('/auth/refresh', tokenData);
+  },
+
+  deleteSession: async (): Promise<ApiResponse<{ message: string }>> => {
+    return api.delete('/auth/session');
+  },
+
+  // Trading 212 API Management
+  setupTrading212API: async (apiSetup: Trading212APISetup): Promise<ApiResponse<Trading212APIResponse>> => {
+    return api.post('/auth/trading212/setup', apiSetup);
+  },
+
+  validateTrading212API: async (apiSetup: Trading212APISetup): Promise<ApiResponse<APIKeyValidation>> => {
+    return api.post('/auth/trading212/validate', apiSetup);
+  },
+
+  removeTrading212API: async (): Promise<ApiResponse<{ message: string }>> => {
+    return api.delete('/auth/trading212/setup');
   },
 
   // Portfolio data

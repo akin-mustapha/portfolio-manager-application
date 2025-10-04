@@ -5,11 +5,17 @@ import { AuthState } from '../types/api';
 interface AppContextType {
   auth: {
     authState: AuthState;
+    initializeSession: (sessionName?: string) => Promise<any>;
+    setupTrading212API: (apiKey: string, validateConnection?: boolean) => Promise<any>;
+    validateTrading212API: (apiKey: string) => Promise<any>;
     setApiKey: (apiKey: string) => void;
-    clearAuth: () => void;
+    clearAuth: () => Promise<void>;
+    disconnectTrading212: () => Promise<void>;
     setConnectionStatus: (status: AuthState['connectionStatus']) => void;
     isAuthenticated: boolean;
     connectionStatus: AuthState['connectionStatus'];
+    isTokenExpired: () => boolean;
+    hasTrading212Connection: boolean;
   };
 }
 

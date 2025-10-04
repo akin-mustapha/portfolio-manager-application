@@ -126,26 +126,26 @@
     - Validate response formats and error handling
     - _Requirements: 2.1, 3.1, 4.1_
 
-- [-] 7. Create React frontend components and layout
-  - [x] 7.1 Set up React application structure and routing
+- [x] 7. Create React frontend components and layout
+  - [-] 7.1 Set up React application structure and routing
     - Configure React Router for navigation between dashboard views
     - Set up global state management with React Query for API data
     - Implement responsive layout with header, sidebar, and main content areas
     - _Requirements: 1.1, 1.2, 1.3_
 
-  - [-] 7.2 Build API setup and authentication UI
+  - [x] 7.2 Build API setup and authentication UI
     - Create API key input form with validation and secure storage
     - Implement connection status indicators and error messaging
     - Add authentication flow with JWT token management
     - _Requirements: 2.1, 2.2, 2.3, 2.4_
 
-  - [ ] 7.3 Implement portfolio overview dashboard
+  - [x] 7.3 Implement portfolio overview dashboard
     - Create metric cards for total value, returns, and key performance indicators
     - Build consolidated pie chart visualization for portfolio allocation
     - Add pie list component with basic performance metrics
     - _Requirements: 3.1, 3.2, 3.3, 4.1_
 
-  - [ ] 7.4 Write component unit tests
+  - [x] 7.4 Write component unit tests
     - Test React components with React Testing Library
     - Validate component rendering and user interactions
     - _Requirements: 1.1, 2.1, 3.1_

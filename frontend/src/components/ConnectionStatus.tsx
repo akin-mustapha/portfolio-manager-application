@@ -13,6 +13,9 @@ const ConnectionStatus: React.FC<ConnectionStatusProps> = ({
   const { auth } = useAppContext();
 
   const getStatusColor = () => {
+    if (!auth.isAuthenticated) return 'bg-gray-400';
+    if (!auth.hasTrading212Connection) return 'bg-yellow-500';
+    
     switch (auth.connectionStatus) {
       case 'connected': return 'bg-green-500';
       case 'connecting': return 'bg-yellow-500 animate-pulse';
@@ -22,15 +25,21 @@ const ConnectionStatus: React.FC<ConnectionStatusProps> = ({
   };
 
   const getStatusText = () => {
+    if (!auth.isAuthenticated) return 'No Session';
+    if (!auth.hasTrading212Connection) return 'Session Active';
+    
     switch (auth.connectionStatus) {
       case 'connected': return 'Connected';
       case 'connecting': return 'Connecting...';
-      case 'error': return 'Error';
+      case 'error': return 'Connection Error';
       default: return 'Not Connected';
     }
   };
 
   const getTextColor = () => {
+    if (!auth.isAuthenticated) return 'text-gray-500';
+    if (!auth.hasTrading212Connection) return 'text-yellow-600';
+    
     switch (auth.connectionStatus) {
       case 'connected': return 'text-green-600';
       case 'connecting': return 'text-yellow-600';

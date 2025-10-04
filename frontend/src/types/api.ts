@@ -9,8 +9,62 @@ export interface ApiResponse<T> {
 export interface AuthState {
   isAuthenticated: boolean;
   apiKey?: string;
+  accessToken?: string;
+  refreshToken?: string;
+  sessionId?: string;
   connectionStatus: 'connected' | 'disconnected' | 'connecting' | 'error';
   lastConnected?: Date;
+  tokenExpiresAt?: Date;
+  sessionName?: string;
+  accountInfo?: {
+    accountId?: string;
+    accountType?: string;
+  };
+}
+
+// Session Types
+export interface SessionCreate {
+  sessionName?: string;
+}
+
+export interface SessionResponse {
+  sessionId: string;
+  accessToken: string;
+  refreshToken: string;
+  tokenType: string;
+  expiresIn: number;
+  createdAt: Date;
+}
+
+export interface TokenRefresh {
+  refreshToken: string;
+}
+
+export interface TokenResponse {
+  accessToken: string;
+  tokenType: string;
+  expiresIn: number;
+}
+
+export interface Trading212APISetup {
+  apiKey: string;
+  validateConnection?: boolean;
+}
+
+export interface Trading212APIResponse {
+  status: string;
+  message: string;
+  accountInfo?: {
+    accountId?: string;
+    accountType?: string;
+  };
+}
+
+export interface APIKeyValidation {
+  isValid: boolean;
+  accountId?: string;
+  accountType?: string;
+  errorMessage?: string;
 }
 
 // Portfolio Types
