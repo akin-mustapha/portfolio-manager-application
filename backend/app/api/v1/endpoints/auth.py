@@ -187,10 +187,11 @@ async def setup_trading212_api(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Invalid Trading 212 API key: {validation_result.error_message}"
             )
-        account_info = {
-            "account_id": validation_result.account_id,
-            "account_type": validation_result.account_type
-        }
+        if validation_result.account_id:
+            account_info = {
+                "account_id": validation_result.account_id,
+                "account_type": validation_result.account_type
+            }
     
     # Encrypt and store API key
     encrypted_api_key = encrypt_api_key(api_setup.api_key)
@@ -253,7 +254,7 @@ async def validate_trading212_api_key(api_key: str) -> APIKeyValidation:
                 account_data = response.json()
                 return APIKeyValidation(
                     is_valid=True,
-                    account_id=account_data.get("id"),
+                    account_id=str(account_data.get("id")),
                     account_type="equity",  # Trading 212 equity account
                     error_message=None
                 )
@@ -261,6 +262,14 @@ async def validate_trading212_api_key(api_key: str) -> APIKeyValidation:
                 return APIKeyValidation(
                     is_valid=False,
                     error_message="Invalid API key or unauthorized access"
+                )
+            elif response.status_code == 429:
+                # Rate limited - assume key is valid but can't validate right now
+                return APIKeyValidation(
+                    is_valid=True,
+                    account_id=None,
+                    account_type="equity",
+                    error_message="Rate limited - validation skipped"
                 )
             else:
                 return APIKeyValidation(

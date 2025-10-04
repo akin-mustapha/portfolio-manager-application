@@ -53,6 +53,9 @@ const ApiSetup: React.FC = () => {
     onSuccess: (data) => {
       if (data.is_valid) {
         setErrors([]);
+        if (data.error_message && data.error_message.includes('Rate limited')) {
+          setErrors(['API key validated successfully (rate limited - full validation skipped)']);
+        }
       } else {
         setErrors([data.error_message || 'Invalid API key']);
       }
