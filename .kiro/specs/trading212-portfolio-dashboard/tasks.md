@@ -74,7 +74,7 @@
     - Add monthly dividend history and trend analysis
     - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 11.1, 11.2, 11.3, 11.4_
 
-  - [ ]* 4.5 Write unit tests for financial calculations
+  - [ ] 4.5 Write unit tests for financial calculations
     - Test calculation accuracy with known financial datasets
     - Validate edge cases (zero positions, negative returns, missing data)
     - _Requirements: 4.1, 5.1, 6.1, 7.1_
@@ -86,13 +86,13 @@
     - Add support for multiple benchmark indices (S&P 500, FTSE 100, etc.)
     - _Requirements: 8.1, 8.4_
 
-  - [-] 5.2 Add benchmark comparison calculations
+  - [x] 5.2 Add benchmark comparison calculations
     - Calculate alpha, tracking error, and correlation with benchmarks
     - Implement performance comparison charts data preparation
     - Add benchmark selection and customization functionality
     - _Requirements: 8.1, 8.2, 8.3, 8.5_
 
-  - [ ]* 5.3 Write tests for benchmark comparison service
+  - [ ] 5.3 Write tests for benchmark comparison service
     - Test benchmark data fetching and caching
     - Validate comparison calculations with known datasets
     - _Requirements: 8.1, 8.2_
@@ -121,19 +121,19 @@
     - Create endpoints for custom benchmark selection
     - _Requirements: 8.1, 8.4, 8.5_
 
-  - [ ]* 6.5 Write API endpoint tests
+  - [ ] 6.5 Write API endpoint tests
     - Test all endpoints with various input scenarios
     - Validate response formats and error handling
     - _Requirements: 2.1, 3.1, 4.1_
 
-- [ ] 7. Create React frontend components and layout
-  - [ ] 7.1 Set up React application structure and routing
+- [-] 7. Create React frontend components and layout
+  - [x] 7.1 Set up React application structure and routing
     - Configure React Router for navigation between dashboard views
     - Set up global state management with React Query for API data
     - Implement responsive layout with header, sidebar, and main content areas
     - _Requirements: 1.1, 1.2, 1.3_
 
-  - [ ] 7.2 Build API setup and authentication UI
+  - [-] 7.2 Build API setup and authentication UI
     - Create API key input form with validation and secure storage
     - Implement connection status indicators and error messaging
     - Add authentication flow with JWT token management
@@ -145,7 +145,7 @@
     - Add pie list component with basic performance metrics
     - _Requirements: 3.1, 3.2, 3.3, 4.1_
 
-  - [ ]* 7.4 Write component unit tests
+  - [ ] 7.4 Write component unit tests
     - Test React components with React Testing Library
     - Validate component rendering and user interactions
     - _Requirements: 1.1, 2.1, 3.1_

@@ -1,0 +1,70 @@
+import React from 'react';
+import { useAppContext } from '../contexts/AppContext';
+
+interface ConnectionStatusProps {
+  showText?: boolean;
+  size?: 'sm' | 'md' | 'lg';
+}
+
+const ConnectionStatus: React.FC<ConnectionStatusProps> = ({ 
+  showText = true, 
+  size = 'md' 
+}) => {
+  const { auth } = useAppContext();
+
+  const getStatusColor = () => {
+    switch (auth.connectionStatus) {
+      case 'connected': return 'bg-green-500';
+      case 'connecting': return 'bg-yellow-500 animate-pulse';
+      case 'error': return 'bg-red-500';
+      default: return 'bg-gray-400';
+    }
+  };
+
+  const getStatusText = () => {
+    switch (auth.connectionStatus) {
+      case 'connected': return 'Connected';
+      case 'connecting': return 'Connecting...';
+      case 'error': return 'Error';
+      default: return 'Not Connected';
+    }
+  };
+
+  const getTextColor = () => {
+    switch (auth.connectionStatus) {
+      case 'connected': return 'text-green-600';
+      case 'connecting': return 'text-yellow-600';
+      case 'error': return 'text-red-600';
+      default: return 'text-gray-500';
+    }
+  };
+
+  const getDotSize = () => {
+    switch (size) {
+      case 'sm': return 'w-2 h-2';
+      case 'lg': return 'w-4 h-4';
+      default: return 'w-3 h-3';
+    }
+  };
+
+  const getTextSize = () => {
+    switch (size) {
+      case 'sm': return 'text-xs';
+      case 'lg': return 'text-base';
+      default: return 'text-sm';
+    }
+  };
+
+  return (
+    <div className="flex items-center space-x-2">
+      <div className={`rounded-full ${getDotSize()} ${getStatusColor()}`} />
+      {showText && (
+        <span className={`${getTextColor()} ${getTextSize()}`}>
+          {getStatusText()}
+        </span>
+      )}
+    </div>
+  );
+};
+
+export default ConnectionStatus;

@@ -1541,7 +1541,7 @@ class BenchmarkService:
             benchmark_aligned = benchmark_returns.loc[common_dates]
             
             # Calculate rolling correlations (30-day window)
-            rolling_correlation = entity_aligned.rolling(window=30).corr(benchmark_aligned.rolling(window=30))
+            rolling_correlation = entity_aligned.rolling(window=30).corr(benchmark_aligned)
             
             # Calculate rolling beta (30-day window)
             rolling_beta = []
