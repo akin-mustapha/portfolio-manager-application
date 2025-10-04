@@ -44,13 +44,13 @@
     - Add data validation and error handling for missing or invalid data
     - _Requirements: 7.1, 7.2, 7.3_
 
-  - [ ]* 3.4 Write integration tests for Trading 212 API service
+  - [x] 3.4 Write integration tests for Trading 212 API service
     - Mock Trading 212 API responses for testing
     - Test error handling scenarios (invalid credentials, rate limits)
     - _Requirements: 2.1, 2.2, 3.1_
 
-- [ ] 4. Create financial calculations engine
-  - [ ] 4.1 Implement portfolio-level metrics calculations
+- [-] 4. Create financial calculations engine
+  - [-] 4.1 Implement portfolio-level metrics calculations
     - Calculate total value, invested amount, returns, and annualized returns
     - Implement volatility, Sharpe ratio, and maximum drawdown calculations using pandas/numpy
     - Add beta calculation against benchmark indices
