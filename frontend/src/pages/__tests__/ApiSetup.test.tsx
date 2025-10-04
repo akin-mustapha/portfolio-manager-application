@@ -164,7 +164,7 @@ describe('ApiSetup', () => {
     renderWithProviders(<ApiSetup />);
 
     const connectButton = screen.getByRole('button', { name: '🔗 Connect to Trading 212' });
-    
+
     // The button should be disabled when API key is empty
     expect(connectButton).toBeDisabled();
   });
