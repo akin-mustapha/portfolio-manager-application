@@ -56,7 +56,7 @@
     - Add beta calculation against benchmark indices
     - _Requirements: 4.1, 4.2, 4.3, 4.4, 5.1, 5.2, 5.3, 5.4_
 
-  - [-] 4.2 Implement pie-level performance calculations
+  - [x] 4.2 Implement pie-level performance calculations
     - Calculate pie-specific metrics (value, returns, contribution to portfolio)
     - Implement time-weighted return calculations for fair comparison
     - Add pie risk metrics (volatility, beta vs portfolio, Sharpe ratio)

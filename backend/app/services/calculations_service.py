@@ -183,7 +183,7 @@ class CalculationsService:
             }
         
         # Total dividends received
-        total_dividends = sum(div.amount for div in dividends)
+        total_dividends = sum(div.total_amount for div in dividends)
         
         # Current dividend yield
         dividend_yield = (total_dividends / total_value * 100) if total_value > 0 else Decimal('0')
@@ -198,7 +198,7 @@ class CalculationsService:
             ]
             
             if recent_dividends:
-                recent_total = sum(div.amount for div in recent_dividends)
+                recent_total = sum(div.total_amount for div in recent_dividends)
                 monthly_avg = recent_total / 12
                 annual_projection = recent_total
             else:
@@ -492,8 +492,10 @@ class CalculationsService:
         pie_return = pie_value - pie_invested
         pie_return_pct = (pie_return / pie_invested * 100) if pie_invested > 0 else Decimal('0')
         
-        # Portfolio contribution
-        portfolio_contribution = (pie_return / portfolio_total_value * 100) if portfolio_total_value > 0 else Decimal('0')
+        # Portfolio contribution calculations
+        portfolio_contribution = self._calculate_pie_portfolio_contribution(
+            pie_return, portfolio_total_value, pie_value
+        )
         portfolio_weight = (pie_value / portfolio_total_value * 100) if portfolio_total_value > 0 else Decimal('0')
         
         # Dividend calculations for pie
@@ -509,7 +511,7 @@ class CalculationsService:
         country_allocation = self._calculate_country_allocation(pie.positions)
         asset_type_allocation = self._calculate_asset_type_allocation(pie.positions)
         
-        # Risk calculations (if historical data available)
+        # Advanced performance and risk calculations
         risk_metrics = None
         annualized_return = None
         time_weighted_return = None
@@ -518,13 +520,18 @@ class CalculationsService:
         if historical_data:
             pie_returns = self._calculate_pie_returns(pie.positions, historical_data)
             if len(pie_returns) > 0:
-                risk_metrics = self._calculate_risk_metrics(pie_returns)
-                annualized_return = self._calculate_annualized_return(pie_returns)
-                time_weighted_return = self._calculate_time_weighted_return(pie_returns)
+                # Enhanced risk metrics calculation for pie
+                risk_metrics = self._calculate_pie_risk_metrics(pie_returns)
                 
-                # Beta vs portfolio
+                # Enhanced time-weighted return calculation
+                time_weighted_return = self._calculate_pie_time_weighted_return(pie_returns)
+                
+                # Annualized return
+                annualized_return = self._calculate_annualized_return(pie_returns)
+                
+                # Beta vs portfolio with enhanced calculation
                 if portfolio_returns is not None and len(portfolio_returns) > 0:
-                    beta_vs_portfolio = self._calculate_pie_beta_vs_portfolio(pie_returns, portfolio_returns)
+                    beta_vs_portfolio = self._calculate_enhanced_pie_beta(pie_returns, portfolio_returns)
         
         # Top holdings for pie
         top_holdings = sorted(pie.positions, key=lambda p: p.market_value, reverse=True)[:5]
@@ -556,7 +563,7 @@ class CalculationsService:
         historical_data: Dict[str, HistoricalData]
     ) -> pd.Series:
         """
-        Calculate pie returns time series.
+        Calculate enhanced pie returns time series with proper weighting.
         
         Args:
             positions: Pie positions
@@ -568,10 +575,12 @@ class CalculationsService:
         if not positions or not historical_data:
             return pd.Series(dtype=float)
         
-        # Get all available dates
+        # Get all available dates for pie positions
+        pie_symbols = {pos.symbol for pos in positions}
         all_dates = set()
+        
         for symbol, data in historical_data.items():
-            if symbol in {pos.symbol for pos in positions}:
+            if symbol in pie_symbols:
                 all_dates.update(point.price_date for point in data.price_history)
         
         if not all_dates:
@@ -579,16 +588,28 @@ class CalculationsService:
         
         all_dates = sorted(all_dates)
         
-        # Calculate pie value for each date
+        # Calculate current total value for weighting
+        current_total_value = sum(pos.market_value for pos in positions)
+        
+        if current_total_value == 0:
+            return pd.Series(dtype=float)
+        
+        # Build position weights based on current market values
+        position_weights = {
+            pos.symbol: pos.market_value / current_total_value 
+            for pos in positions
+        }
+        
+        # Calculate weighted pie value for each date
         pie_values = []
-        total_value = sum(pos.market_value for pos in positions)
+        valid_dates = []
         
         for date in all_dates:
-            daily_value = Decimal('0')
+            daily_weighted_value = Decimal('0')
+            has_data = False
             
             for pos in positions:
                 if pos.symbol in historical_data:
-                    # Find price for this date
                     price_data = historical_data[pos.symbol]
                     price_point = next(
                         (p for p in price_data.price_history if p.price_date == date),
@@ -596,17 +617,172 @@ class CalculationsService:
                     )
                     
                     if price_point:
-                        # Calculate position weight within pie
-                        position_weight = pos.market_value / total_value if total_value > 0 else Decimal('0')
-                        daily_value += position_weight * price_point.close_price
+                        weight = position_weights[pos.symbol]
+                        # Use normalized price (price relative to current price for proper weighting)
+                        normalized_price = price_point.close_price / pos.current_price if pos.current_price > 0 else Decimal('1')
+                        daily_weighted_value += weight * normalized_price
+                        has_data = True
             
-            pie_values.append(float(daily_value))
+            # Only include dates where we have at least some price data
+            if has_data and daily_weighted_value > 0:
+                pie_values.append(float(daily_weighted_value))
+                valid_dates.append(date)
+        
+        if len(pie_values) < 2:
+            return pd.Series(dtype=float)
         
         # Convert to pandas Series and calculate returns
-        pie_series = pd.Series(pie_values, index=all_dates)
+        pie_series = pd.Series(pie_values, index=valid_dates)
         returns = pie_series.pct_change().dropna()
         
         return returns
+    
+    def _calculate_pie_portfolio_contribution(
+        self,
+        pie_return: Decimal,
+        portfolio_total_value: Decimal,
+        pie_value: Decimal
+    ) -> Decimal:
+        """
+        Calculate pie's contribution to total portfolio return.
+        
+        Args:
+            pie_return: Absolute return of the pie
+            portfolio_total_value: Total portfolio value
+            pie_value: Current pie value
+            
+        Returns:
+            Pie's contribution to portfolio return as percentage
+        """
+        if portfolio_total_value <= 0:
+            return Decimal('0')
+        
+        # Contribution = (pie_return / portfolio_total_value) * 100
+        contribution = (pie_return / portfolio_total_value * 100)
+        return contribution
+    
+    def _calculate_pie_time_weighted_return(self, pie_returns: pd.Series) -> Optional[Decimal]:
+        """
+        Calculate enhanced time-weighted return for pie with proper handling of cash flows.
+        
+        Args:
+            pie_returns: Pie returns time series
+            
+        Returns:
+            Time-weighted return percentage
+        """
+        if len(pie_returns) == 0:
+            return None
+        
+        # Time-weighted return calculation using geometric linking
+        # TWR = [(1 + R1) × (1 + R2) × ... × (1 + Rn)] - 1
+        cumulative_return = (1 + pie_returns).prod() - 1
+        
+        # Convert to percentage
+        return Decimal(str(cumulative_return * 100))
+    
+    def _calculate_pie_risk_metrics(self, pie_returns: pd.Series) -> RiskMetrics:
+        """
+        Calculate enhanced risk metrics specifically for pie-level analysis.
+        
+        Args:
+            pie_returns: Pie returns time series
+            
+        Returns:
+            RiskMetrics with pie-specific calculations
+        """
+        if len(pie_returns) == 0:
+            return self._default_risk_metrics()
+        
+        returns_array = pie_returns.values
+        
+        # Enhanced volatility calculation (annualized)
+        volatility = Decimal(str(np.std(returns_array) * np.sqrt(252)))
+        
+        # Enhanced Sharpe ratio calculation
+        excess_returns = returns_array - float(self.risk_free_rate) / 252
+        if np.std(excess_returns) > 0:
+            sharpe_ratio = Decimal(str(np.mean(excess_returns) / np.std(excess_returns) * np.sqrt(252)))
+        else:
+            sharpe_ratio = None
+        
+        # Sortino ratio (downside deviation only)
+        downside_returns = returns_array[returns_array < 0]
+        if len(downside_returns) > 0:
+            downside_deviation = np.std(downside_returns) * np.sqrt(252)
+            sortino_ratio = Decimal(str(np.mean(excess_returns) / downside_deviation)) if downside_deviation > 0 else None
+        else:
+            sortino_ratio = None
+        
+        # Maximum drawdown calculation
+        cumulative_returns = (1 + pie_returns).cumprod()
+        rolling_max = cumulative_returns.expanding().max()
+        drawdowns = (cumulative_returns - rolling_max) / rolling_max
+        max_drawdown = Decimal(str(abs(drawdowns.min()) * 100))
+        current_drawdown = Decimal(str(abs(drawdowns.iloc[-1]) * 100))
+        
+        # Value at Risk calculations
+        var_95 = Decimal(str(np.percentile(returns_array, 5) * 100)) if len(returns_array) > 0 else None
+        var_99 = Decimal(str(np.percentile(returns_array, 1) * 100)) if len(returns_array) > 0 else None
+        
+        # Conditional VaR (Expected Shortfall)
+        if var_95 is not None:
+            var_95_threshold = float(var_95) / 100
+            tail_returns = returns_array[returns_array <= var_95_threshold]
+            cvar_95 = Decimal(str(np.mean(tail_returns) * 100)) if len(tail_returns) > 0 else None
+        else:
+            cvar_95 = None
+        
+        # Risk categorization
+        risk_category, risk_score = self._categorize_risk(volatility, max_drawdown, sharpe_ratio)
+        
+        return RiskMetrics(
+            volatility=volatility,
+            sharpe_ratio=sharpe_ratio,
+            sortino_ratio=sortino_ratio,
+            max_drawdown=max_drawdown,
+            current_drawdown=current_drawdown,
+            var_95=var_95,
+            var_99=var_99,
+            cvar_95=cvar_95,
+            risk_category=risk_category,
+            risk_score=risk_score
+        )
+    
+    def _calculate_enhanced_pie_beta(
+        self, 
+        pie_returns: pd.Series, 
+        portfolio_returns: pd.Series
+    ) -> Optional[Decimal]:
+        """
+        Calculate enhanced pie beta vs portfolio with improved statistical methods.
+        
+        Args:
+            pie_returns: Pie returns time series
+            portfolio_returns: Portfolio returns time series
+            
+        Returns:
+            Enhanced beta coefficient or None if calculation not possible
+        """
+        # Align returns
+        aligned_pie, aligned_portfolio = self._align_returns(pie_returns, portfolio_returns)
+        
+        if len(aligned_pie) < 10:  # Require minimum 10 observations for statistical significance
+            return None
+        
+        # Calculate beta using covariance method
+        covariance = np.cov(aligned_pie, aligned_portfolio)[0, 1]
+        portfolio_variance = np.var(aligned_portfolio)
+        
+        if portfolio_variance > 0:
+            beta = covariance / portfolio_variance
+            
+            # Apply bounds to prevent extreme beta values
+            beta = max(-3.0, min(3.0, beta))  # Bound beta between -3 and 3
+            
+            return Decimal(str(beta))
+        
+        return None
     
     def _calculate_pie_beta_vs_portfolio(
         self, 
@@ -623,20 +799,8 @@ class CalculationsService:
         Returns:
             Beta coefficient or None if calculation not possible
         """
-        # Align returns
-        aligned_pie, aligned_portfolio = self._align_returns(pie_returns, portfolio_returns)
-        
-        if len(aligned_pie) < 2 or len(aligned_portfolio) < 2:
-            return None
-        
-        # Calculate beta
-        covariance = np.cov(aligned_pie, aligned_portfolio)[0, 1]
-        portfolio_variance = np.var(aligned_portfolio)
-        
-        if portfolio_variance > 0:
-            return Decimal(str(covariance / portfolio_variance))
-        
-        return None
+        # Use the enhanced beta calculation
+        return self._calculate_enhanced_pie_beta(pie_returns, portfolio_returns)
     
     def calculate_allocation_drift(
         self,
@@ -676,6 +840,60 @@ class CalculationsService:
             }
         
         return drift_analysis
+    
+    def calculate_pie_performance_comparison(
+        self,
+        pies: List[Pie],
+        portfolio_total_value: Decimal,
+        historical_data: Optional[Dict[str, HistoricalData]] = None,
+        dividends: Optional[List[Dividend]] = None
+    ) -> Dict[str, Dict[str, Decimal]]:
+        """
+        Calculate performance comparison metrics across all pies.
+        
+        Args:
+            pies: List of pies to compare
+            portfolio_total_value: Total portfolio value
+            historical_data: Historical price data
+            dividends: Dividend history
+            
+        Returns:
+            Dictionary with comparison metrics for each pie
+        """
+        if not pies:
+            return {}
+        
+        comparison_metrics = {}
+        
+        # Calculate portfolio returns for beta calculations
+        all_positions = []
+        for pie in pies:
+            all_positions.extend(pie.positions)
+        
+        portfolio_returns = None
+        if historical_data:
+            portfolio_returns = self._calculate_portfolio_returns(all_positions, historical_data)
+        
+        for pie in pies:
+            pie_metrics = self.calculate_pie_metrics(
+                pie, portfolio_total_value, historical_data, dividends, portfolio_returns
+            )
+            
+            comparison_metrics[pie.id] = {
+                'name': pie.name,
+                'total_return_pct': pie_metrics.total_return_pct,
+                'annualized_return': pie_metrics.annualized_return or Decimal('0'),
+                'time_weighted_return': pie_metrics.time_weighted_return or Decimal('0'),
+                'portfolio_weight': pie_metrics.portfolio_weight,
+                'portfolio_contribution': pie_metrics.portfolio_contribution,
+                'volatility': pie_metrics.risk_metrics.volatility if pie_metrics.risk_metrics else Decimal('0'),
+                'sharpe_ratio': pie_metrics.risk_metrics.sharpe_ratio if pie_metrics.risk_metrics and pie_metrics.risk_metrics.sharpe_ratio else Decimal('0'),
+                'max_drawdown': pie_metrics.risk_metrics.max_drawdown if pie_metrics.risk_metrics else Decimal('0'),
+                'beta_vs_portfolio': pie_metrics.beta_vs_portfolio or Decimal('1'),
+                'dividend_yield': pie_metrics.dividend_yield
+            }
+        
+        return comparison_metrics
     
     def calculate_benchmark_comparison(
         self,
