@@ -51,10 +51,10 @@ const ApiSetup: React.FC = () => {
   const validateApiMutation = useMutation({
     mutationFn: (apiKey: string) => auth.validateTrading212API(apiKey),
     onSuccess: (data) => {
-      if (data.isValid) {
+      if (data.is_valid) {
         setErrors([]);
       } else {
-        setErrors([data.errorMessage || 'Invalid API key']);
+        setErrors([data.error_message || 'Invalid API key']);
       }
     },
     onError: (error: any) => {
@@ -216,7 +216,7 @@ const ApiSetup: React.FC = () => {
               <div>Last connected: {new Date(auth.authState.lastConnected).toLocaleString()}</div>
             )}
             {auth.authState.accountInfo && (
-              <div>Account: {auth.authState.accountInfo.accountType} ({auth.authState.accountInfo.accountId})</div>
+              <div>Account: {auth.authState.accountInfo.account_type} ({auth.authState.accountInfo.account_id})</div>
             )}
           </div>
         </div>
@@ -430,8 +430,8 @@ const ApiSetup: React.FC = () => {
             <div className="bg-blue-50 border border-blue-200 rounded-md p-4 mb-4">
               <h4 className="text-sm font-medium text-blue-800 mb-2">Account Information</h4>
               <div className="text-sm text-blue-700 space-y-1">
-                <div>Account ID: {auth.authState.accountInfo.accountId}</div>
-                <div>Account Type: {auth.authState.accountInfo.accountType}</div>
+                <div>Account ID: {auth.authState.accountInfo.account_id}</div>
+                <div>Account Type: {auth.authState.accountInfo.account_type}</div>
               </div>
             </div>
           )}

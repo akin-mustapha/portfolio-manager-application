@@ -7,6 +7,7 @@ import MetricCard from '../components/MetricCard';
 import PieChart from '../components/PieChart';
 import PieList from '../components/PieList';
 import ConnectionStatus from '../components/ConnectionStatus';
+import { Pie, Portfolio } from '../types';
 
 const Dashboard: React.FC = () => {
   const { auth } = useAppContext();
@@ -27,8 +28,8 @@ const Dashboard: React.FC = () => {
     refetchInterval: 5 * 60 * 1000, // Refetch every 5 minutes
   });
 
-  const portfolio = portfolioData?.data;
-  const pies = piesData?.data || [];
+  const portfolio: Portfolio | undefined = portfolioData;
+  const pies: Pie[] = piesData || [];
 
   // Show connection prompt if not authenticated
   if (!auth.isAuthenticated) {
@@ -203,7 +204,7 @@ const Dashboard: React.FC = () => {
         />
         <MetricCard
           title="Total Return"
-          value={portfolio?.totalReturnPercentage ? `${portfolio.totalReturnPercentage.toFixed(2)}%` : '--'}
+          value={portfolio?.returnPercentage ? `${portfolio.returnPercentage.toFixed(2)}%` : '--'}
           loading={portfolioLoading}
           trend={portfolio?.totalReturn ? {
             value: portfolio.totalReturn,
@@ -238,7 +239,7 @@ const Dashboard: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="text-center p-4 bg-gray-50 rounded-lg">
               <div className="text-2xl font-bold text-gray-900">
-                {portfolio.totalReturnPercentage ? `${portfolio.totalReturnPercentage.toFixed(2)}%` : '--'}
+                {portfolio.returnPercentage ? `${portfolio.returnPercentage.toFixed(2)}%` : '--'}
               </div>
               <div className="text-sm text-gray-500 mt-1">Total Return</div>
               <div className={`text-xs mt-1 ${portfolio.totalReturn >= 0 ? 'text-green-600' : 'text-red-600'}`}>

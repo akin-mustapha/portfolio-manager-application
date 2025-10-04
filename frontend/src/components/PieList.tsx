@@ -1,15 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-
-interface Pie {
-  id: string;
-  name: string;
-  totalValue: number;
-  investedAmount: number;
-  returnAmount: number;
-  returnPercentage: number;
-  updatedAt: string;
-}
+import { Pie } from '../types';
 
 interface PieListProps {
   pies: Pie[];
@@ -60,7 +51,9 @@ const PieList: React.FC<PieListProps> = ({
   const displayPies = maxItems ? pies.slice(0, maxItems) : pies;
   const hasMore = maxItems && pies.length > maxItems;
 
-  const formatReturn = (returnAmount: number, returnPercentage: number) => {
+  const formatReturn = (pie: Pie) => {
+    // Calculate return amount from percentage and invested amount
+    const returnAmount = (pie.returnPct / 100) * pie.investedAmount;
     const isPositive = returnAmount >= 0;
     const color = isPositive ? 'text-green-600' : 'text-red-600';
     const sign = isPositive ? '+' : '';
@@ -71,7 +64,7 @@ const PieList: React.FC<PieListProps> = ({
           {sign}£{Math.abs(returnAmount).toLocaleString()}
         </div>
         <div className="text-sm">
-          {sign}{returnPercentage.toFixed(2)}%
+          {sign}{pie.returnPct.toFixed(2)}%
         </div>
       </div>
     );
@@ -107,7 +100,7 @@ const PieList: React.FC<PieListProps> = ({
           </div>
           
           <div className="flex items-center space-x-3">
-            {formatReturn(pie.returnAmount, pie.returnPercentage)}
+            {formatReturn(pie)}
             <div className="text-gray-400">
               →
             </div>

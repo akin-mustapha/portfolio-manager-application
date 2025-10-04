@@ -1,6 +1,5 @@
 import axios from 'axios';
 import { 
-  ApiResponse, 
   ApiError,
   SessionCreate, 
   SessionResponse, 
@@ -74,8 +73,8 @@ apiClient.interceptors.response.use(
               refresh_token: refreshToken
             });
             
-            if (refreshResponse.data.data) {
-              const { access_token, expires_in } = refreshResponse.data.data;
+            if (refreshResponse.data) {
+              const { access_token, expires_in } = refreshResponse.data;
               
               // Update stored auth data
               const updatedAuth = {
@@ -113,16 +112,16 @@ apiClient.interceptors.response.use(
 
 // Generic API functions
 export const api = {
-  get: <T>(url: string): Promise<ApiResponse<T>> =>
+  get: <T>(url: string): Promise<T> =>
     apiClient.get(url).then((response) => response.data),
   
-  post: <T>(url: string, data?: any): Promise<ApiResponse<T>> =>
+  post: <T>(url: string, data?: any): Promise<T> =>
     apiClient.post(url, data).then((response) => response.data),
   
-  put: <T>(url: string, data?: any): Promise<ApiResponse<T>> =>
+  put: <T>(url: string, data?: any): Promise<T> =>
     apiClient.put(url, data).then((response) => response.data),
   
-  delete: <T>(url: string): Promise<ApiResponse<T>> =>
+  delete: <T>(url: string): Promise<T> =>
     apiClient.delete(url).then((response) => response.data),
 };
 
@@ -131,42 +130,42 @@ export const api = {
 // Specific API service functions
 export const apiService = {
   // Session Management
-  createSession: async (sessionData: SessionCreate): Promise<ApiResponse<SessionResponse>> => {
+  createSession: async (sessionData: SessionCreate): Promise<SessionResponse> => {
     return api.post('/auth/session', sessionData);
   },
 
-  refreshToken: async (tokenData: TokenRefresh): Promise<ApiResponse<TokenResponse>> => {
+  refreshToken: async (tokenData: TokenRefresh): Promise<TokenResponse> => {
     return api.post('/auth/refresh', tokenData);
   },
 
-  deleteSession: async (): Promise<ApiResponse<{ message: string }>> => {
+  deleteSession: async (): Promise<{ message: string }> => {
     return api.delete('/auth/session');
   },
 
   // Trading 212 API Management
-  setupTrading212API: async (apiSetup: Trading212APISetup): Promise<ApiResponse<Trading212APIResponse>> => {
+  setupTrading212API: async (apiSetup: Trading212APISetup): Promise<Trading212APIResponse> => {
     return api.post('/auth/trading212/setup', apiSetup);
   },
 
-  validateTrading212API: async (apiSetup: Trading212APISetup): Promise<ApiResponse<APIKeyValidation>> => {
+  validateTrading212API: async (apiSetup: Trading212APISetup): Promise<APIKeyValidation> => {
     return api.post('/auth/trading212/validate', apiSetup);
   },
 
-  removeTrading212API: async (): Promise<ApiResponse<{ message: string }>> => {
+  removeTrading212API: async (): Promise<{ message: string }> => {
     return api.delete('/auth/trading212/setup');
   },
 
   // Portfolio data
-  getPortfolio: async (): Promise<ApiResponse<any>> => {
+  getPortfolio: async (): Promise<any> => {
     return api.get('/portfolio');
   },
 
-  getPies: async (): Promise<ApiResponse<any[]>> => {
+  getPies: async (): Promise<any[]> => {
     return api.get('/pies');
   },
 
   // Health check
-  healthCheck: async (): Promise<ApiResponse<{ status: string }>> => {
+  healthCheck: async (): Promise<{ status: string }> => {
     return api.get('/health');
   },
 };

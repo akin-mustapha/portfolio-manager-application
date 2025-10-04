@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { AuthState, SessionResponse, Trading212APIResponse } from '../types/api';
+import { AuthState } from '../types/api';
 import { apiService } from '../services/api';
 
 const AUTH_STORAGE_KEY = 'trading212_auth';
@@ -46,23 +46,22 @@ export const useAuth = () => {
   const initializeSession = useCallback(async (sessionName?: string) => {
     try {
       console.log('Initializing session with name:', sessionName);
-      const response = await apiService.createSession({ sessionName });
+      const response = await apiService.createSession({ session_name: sessionName });
       console.log('Session response:', response);
-      const sessionData = response.data;
       
       const newAuthState: AuthState = {
         isAuthenticated: true,
-        sessionId: sessionData.sessionId,
-        accessToken: sessionData.accessToken,
-        refreshToken: sessionData.refreshToken,
-        tokenExpiresAt: new Date(Date.now() + sessionData.expiresIn * 1000),
+        sessionId: response.session_id,
+        accessToken: response.access_token,
+        refreshToken: response.refresh_token,
+        tokenExpiresAt: new Date(Date.now() + response.expires_in * 1000),
         connectionStatus: 'disconnected',
-        lastConnected: sessionData.createdAt,
+        lastConnected: new Date(response.created_at),
         sessionName: sessionName,
       };
       
       setAuthState(newAuthState);
-      return sessionData;
+      return response;
     } catch (error) {
       console.error('Failed to initialize session:', error);
       throw error;
@@ -79,21 +78,19 @@ export const useAuth = () => {
       }
       
       const response = await apiService.setupTrading212API({
-        apiKey,
-        validateConnection
+        api_key: apiKey,
+        validate_connection: validateConnection
       });
-      
-      const setupData = response.data;
       
       setAuthState(prev => ({
         ...prev,
         apiKey,
         connectionStatus: 'connected',
         lastConnected: new Date(),
-        accountInfo: setupData.accountInfo,
+        accountInfo: response.account_info,
       }));
       
-      return setupData;
+      return response;
     } catch (error) {
       setConnectionStatus('error');
       throw error;
@@ -103,10 +100,10 @@ export const useAuth = () => {
   const validateTrading212API = useCallback(async (apiKey: string) => {
     try {
       const response = await apiService.validateTrading212API({
-        apiKey,
-        validateConnection: true
+        api_key: apiKey,
+        validate_connection: true
       });
-      return response.data;
+      return response;
     } catch (error) {
       console.error('API validation failed:', error);
       throw error;

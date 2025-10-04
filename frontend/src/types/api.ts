@@ -17,54 +17,54 @@ export interface AuthState {
   tokenExpiresAt?: Date;
   sessionName?: string;
   accountInfo?: {
-    accountId?: string;
-    accountType?: string;
+    account_id?: string;
+    account_type?: string;
   };
 }
 
 // Session Types
 export interface SessionCreate {
-  sessionName?: string;
+  session_name?: string;
 }
 
 export interface SessionResponse {
-  sessionId: string;
-  accessToken: string;
-  refreshToken: string;
-  tokenType: string;
-  expiresIn: number;
-  createdAt: Date;
+  session_id: string;
+  access_token: string;
+  refresh_token: string;
+  token_type: string;
+  expires_in: number;
+  created_at: string;
 }
 
 export interface TokenRefresh {
-  refreshToken: string;
+  refresh_token: string;
 }
 
 export interface TokenResponse {
-  accessToken: string;
-  tokenType: string;
-  expiresIn: number;
+  access_token: string;
+  token_type: string;
+  expires_in: number;
 }
 
 export interface Trading212APISetup {
-  apiKey: string;
-  validateConnection?: boolean;
+  api_key: string;
+  validate_connection?: boolean;
 }
 
 export interface Trading212APIResponse {
   status: string;
   message: string;
-  accountInfo?: {
-    accountId?: string;
-    accountType?: string;
+  account_info?: {
+    account_id?: string;
+    account_type?: string;
   };
 }
 
 export interface APIKeyValidation {
-  isValid: boolean;
-  accountId?: string;
-  accountType?: string;
-  errorMessage?: string;
+  is_valid: boolean;
+  account_id?: string;
+  account_type?: string;
+  error_message?: string;
 }
 
 // Portfolio Types
