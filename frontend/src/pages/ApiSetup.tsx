@@ -80,12 +80,33 @@ const ApiSetup: React.FC = () => {
     createSessionMutation.mutate();
   };
 
+  const validateApiKey = (key: string): string[] => {
+    const errors: string[] = [];
+    
+    if (!key.trim()) {
+      errors.push('API key is required');
+      return errors;
+    }
+    
+    // Basic format validation for Trading 212 API keys
+    if (key.length < 10) {
+      errors.push('API key appears to be too short');
+    }
+    
+    if (!/^[A-Za-z0-9+/=_-]+$/.test(key)) {
+      errors.push('API key contains invalid characters');
+    }
+    
+    return errors;
+  };
+
   const handleApiSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setErrors([]);
     
-    if (!apiKey.trim()) {
-      setErrors(['API key is required']);
+    const validationErrors = validateApiKey(apiKey);
+    if (validationErrors.length > 0) {
+      setErrors(validationErrors);
       return;
     }
 
@@ -153,6 +174,21 @@ const ApiSetup: React.FC = () => {
     }
   };
 
+  const getSecurityLevel = () => {
+    if (!auth.isAuthenticated) return { level: 'None', color: 'text-gray-500', icon: '🔒' };
+    if (!auth.hasTrading212Connection) return { level: 'Session Only', color: 'text-yellow-600', icon: '🔐' };
+    if (auth.connectionStatus === 'connected') return { level: 'Fully Secured', color: 'text-green-600', icon: '🔐' };
+    return { level: 'Partial', color: 'text-yellow-600', icon: '🔐' };
+  };
+
+  const isTokenExpiringSoon = () => {
+    if (!auth.authState.tokenExpiresAt) return false;
+    const expiresAt = new Date(auth.authState.tokenExpiresAt);
+    const now = new Date();
+    const timeUntilExpiry = expiresAt.getTime() - now.getTime();
+    return timeUntilExpiry < 5 * 60 * 1000; // 5 minutes
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -181,6 +217,30 @@ const ApiSetup: React.FC = () => {
             )}
             {auth.authState.accountInfo && (
               <div>Account: {auth.authState.accountInfo.accountType} ({auth.authState.accountInfo.accountId})</div>
+            )}
+          </div>
+        </div>
+        
+        {/* Security Level Indicator */}
+        <div className="mt-3 pt-3 border-t border-current border-opacity-20">
+          <div className="flex items-center justify-between text-sm">
+            <div className="flex items-center">
+              <span className="mr-2">{getSecurityLevel().icon}</span>
+              <span className={`font-medium ${getSecurityLevel().color}`}>
+                Security: {getSecurityLevel().level}
+              </span>
+            </div>
+            {auth.isAuthenticated && (
+              <div className="flex items-center space-x-4">
+                {isTokenExpiringSoon() && (
+                  <span className="text-yellow-600 text-xs">⚠️ Token expires soon</span>
+                )}
+                {auth.authState.tokenExpiresAt && (
+                  <span className="text-xs opacity-75">
+                    Token expires: {new Date(auth.authState.tokenExpiresAt).toLocaleTimeString()}
+                  </span>
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -237,9 +297,18 @@ const ApiSetup: React.FC = () => {
             <button
               type="submit"
               disabled={createSessionMutation.isPending}
-              className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
             >
-              {createSessionMutation.isPending ? 'Creating Session...' : 'Create Session'}
+              {createSessionMutation.isPending ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Creating Session...
+                </>
+              ) : (
+                <>
+                  🚀 Create Session
+                </>
+              )}
             </button>
           </form>
         </div>
@@ -265,31 +334,64 @@ const ApiSetup: React.FC = () => {
                   type={showApiKey ? 'text' : 'password'}
                   id="apiKey"
                   value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  onChange={(e) => {
+                    setApiKey(e.target.value);
+                    // Clear errors when user starts typing
+                    if (errors.length > 0) {
+                      setErrors([]);
+                    }
+                  }}
+                  className={`block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 ${
+                    errors.length > 0 
+                      ? 'border-red-300 focus:ring-red-500 focus:border-red-500' 
+                      : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
+                  }`}
                   placeholder="Enter your Trading 212 API key"
                   disabled={setupApiKeyMutation.isPending}
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowApiKey(!showApiKey)}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
-                >
-                  {showApiKey ? '🙈' : '👁️'}
-                </button>
+                <div className="absolute inset-y-0 right-0 flex items-center pr-3 space-x-2">
+                  {apiKey && (
+                    <div className={`w-2 h-2 rounded-full ${
+                      validateApiKey(apiKey).length === 0 ? 'bg-green-400' : 'bg-red-400'
+                    }`} />
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setShowApiKey(!showApiKey)}
+                    className="text-gray-400 hover:text-gray-600 focus:outline-none"
+                  >
+                    {showApiKey ? '🙈' : '👁️'}
+                  </button>
+                </div>
               </div>
-              <p className="mt-1 text-sm text-gray-500">
-                Your API key will be validated and securely stored.
-              </p>
+              <div className="mt-1 flex justify-between items-start">
+                <p className="text-sm text-gray-500">
+                  Your API key will be validated and securely stored with AES-256 encryption.
+                </p>
+                {apiKey && (
+                  <span className="text-xs text-gray-400 ml-2">
+                    {apiKey.length} chars
+                  </span>
+                )}
+              </div>
             </div>
 
             <div className="flex space-x-3">
               <button
                 type="submit"
-                disabled={setupApiKeyMutation.isPending || !apiKey.trim()}
-                className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={setupApiKeyMutation.isPending || !apiKey.trim() || validateApiKey(apiKey).length > 0}
+                className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
               >
-                {setupApiKeyMutation.isPending ? 'Connecting...' : 'Connect to Trading 212'}
+                {setupApiKeyMutation.isPending ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Connecting...
+                  </>
+                ) : (
+                  <>
+                    🔗 Connect to Trading 212
+                  </>
+                )}
               </button>
               <button
                 type="button"
@@ -334,26 +436,44 @@ const ApiSetup: React.FC = () => {
             </div>
           )}
 
-          <div className="flex space-x-3">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <button
               onClick={handleTestConnection}
               disabled={validateApiMutation.isPending}
-              className="bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
+              className="flex items-center justify-center bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
             >
-              {validateApiMutation.isPending ? 'Testing...' : 'Test Connection'}
+              {validateApiMutation.isPending ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Testing...
+                </>
+              ) : (
+                <>
+                  🔍 Test Connection
+                </>
+              )}
             </button>
             <button
               onClick={handleDisconnect}
               disabled={disconnectMutation.isPending}
-              className="bg-yellow-600 text-white py-2 px-4 rounded-md hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2 disabled:opacity-50"
+              className="flex items-center justify-center bg-yellow-600 text-white py-2 px-4 rounded-md hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2 disabled:opacity-50"
             >
-              {disconnectMutation.isPending ? 'Disconnecting...' : 'Disconnect Trading 212'}
+              {disconnectMutation.isPending ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Disconnecting...
+                </>
+              ) : (
+                <>
+                  🔌 Disconnect API
+                </>
+              )}
             </button>
             <button
               onClick={handleFullReset}
-              className="bg-red-600 text-white py-2 px-4 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+              className="flex items-center justify-center bg-red-600 text-white py-2 px-4 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
             >
-              Reset All
+              🔄 Reset All
             </button>
           </div>
         </div>
@@ -371,12 +491,31 @@ const ApiSetup: React.FC = () => {
           <li>Paste the API key in the field above</li>
           <li>Click "Connect to Trading 212" to establish the connection</li>
         </ol>
-        <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
-          <p className="text-sm text-yellow-800">
-            <strong>Security Note:</strong> Your API key is encrypted and stored securely. 
-            JWT tokens are used for session management with automatic refresh. 
-            All communication with Trading 212 is done securely through our backend.
-          </p>
+        <div className="mt-4 space-y-3">
+          <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+            <p className="text-sm text-yellow-800">
+              <strong>🔒 Security Features:</strong>
+            </p>
+            <ul className="mt-2 text-sm text-yellow-700 space-y-1">
+              <li>• API keys encrypted with AES-256 encryption</li>
+              <li>• JWT tokens with automatic refresh</li>
+              <li>• Secure HTTPS communication only</li>
+              <li>• No API keys stored in browser localStorage</li>
+              <li>• Session-based authentication with expiration</li>
+            </ul>
+          </div>
+          
+          <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
+            <p className="text-sm text-blue-800">
+              <strong>💡 Tips:</strong>
+            </p>
+            <ul className="mt-2 text-sm text-blue-700 space-y-1">
+              <li>• Use the "Test Connection" button to verify your API key</li>
+              <li>• Your session will automatically refresh when needed</li>
+              <li>• You can safely close and reopen the application</li>
+              <li>• API keys are never transmitted to third parties</li>
+            </ul>
+          </div>
         </div>
       </div>
 
