@@ -13,6 +13,8 @@ import {
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
+console.log('API Base URL:', API_BASE_URL);
+
 // Create axios instance with default config
 export const apiClient = axios.create({
   baseURL: `${API_BASE_URL}/api/v1`,
@@ -47,6 +49,15 @@ apiClient.interceptors.request.use(
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
+    console.error('API Error:', {
+      message: error.message,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      url: error.config?.url,
+      method: error.config?.method,
+      baseURL: error.config?.baseURL
+    });
+    
     const originalRequest = error.config;
     
     // Handle 401 errors with token refresh

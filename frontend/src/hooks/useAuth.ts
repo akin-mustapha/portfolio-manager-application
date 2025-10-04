@@ -45,7 +45,9 @@ export const useAuth = () => {
   // Initialize session if not authenticated
   const initializeSession = useCallback(async (sessionName?: string) => {
     try {
+      console.log('Initializing session with name:', sessionName);
       const response = await apiService.createSession({ sessionName });
+      console.log('Session response:', response);
       const sessionData = response.data;
       
       const newAuthState: AuthState = {

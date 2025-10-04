@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     BACKEND_CORS_ORIGINS: List[AnyHttpUrl] = [
         "http://localhost:3000",  # React development server
         "http://127.0.0.1:3000",
+        "http://localhost:3001",  # Alternative port
+        "http://127.0.0.1:3001",
     ]
     
     # Security
