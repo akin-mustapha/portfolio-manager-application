@@ -115,7 +115,7 @@ class TestPricePoint:
         
         json_data = price_point.model_dump()
         
-        assert json_data["price_date"] == "2024-01-15"
+        assert str(json_data["price_date"]) == "2024-01-15"
         assert json_data["close_price"] == 150.00
         assert json_data["volume"] == 1000000
 
@@ -258,8 +258,8 @@ class TestHistoricalData:
         json_data = historical_data.model_dump()
         
         assert json_data["symbol"] == "AAPL"
-        assert json_data["start_date"] == "2024-01-15"
-        assert json_data["end_date"] == "2024-01-15"
+        assert str(json_data["start_date"]) == "2024-01-15"
+        assert str(json_data["end_date"]) == "2024-01-15"
         assert len(json_data["price_history"]) == 1
         assert isinstance(json_data["last_updated"], datetime)
 
@@ -412,9 +412,9 @@ class TestPerformanceSnapshot:
         
         assert json_data["entity_id"] == "portfolio_123"
         assert json_data["entity_type"] == "portfolio"
-        assert json_data["snapshot_date"] == "2024-01-31"
-        assert json_data["period_start"] == "2024-01-01"
-        assert json_data["period_end"] == "2024-01-31"
+        assert str(json_data["snapshot_date"]) == "2024-01-31"
+        assert str(json_data["period_start"]) == "2024-01-01"
+        assert str(json_data["period_end"]) == "2024-01-31"
         assert json_data["start_value"] == 45000.00
         assert json_data["end_value"] == 47500.00
         assert isinstance(json_data["created_at"], datetime)

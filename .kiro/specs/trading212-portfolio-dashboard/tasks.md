@@ -21,19 +21,19 @@
     - Add database migration setup with Alembic
     - _Requirements: 2.2, 3.1, 4.1_
 
-  - [ ] 2.3 Write unit tests for data models
+  - [x] 2.3 Write unit tests for data models
     - Test Pydantic model validation with valid and invalid data
     - Test database model relationships and constraints
     - _Requirements: 2.2, 3.1_
 
-- [ ] 3. Implement Trading 212 API integration service
-  - [ ] 3.1 Create Trading212Service class with authentication
+- [-] 3. Implement Trading 212 API integration service
+  - [x] 3.1 Create Trading212Service class with authentication
     - Implement API key authentication and session management
     - Add error handling for authentication failures and rate limiting
     - Create secure storage for API credentials with encryption
     - _Requirements: 2.1, 2.2, 2.3, 2.4_
 
-  - [ ] 3.2 Implement portfolio data fetching methods
+  - [-] 3.2 Implement portfolio data fetching methods
     - Add methods to fetch account info, pies, and positions from Trading 212 API
     - Implement data transformation from Trading 212 format to internal models
     - Add caching layer with Redis for API responses

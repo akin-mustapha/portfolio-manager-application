@@ -62,9 +62,9 @@ class TestDividendType:
     
     def test_dividend_type_string_representation(self):
         """Test string representation of dividend types."""
-        assert str(DividendType.CASH) == "CASH"
-        assert str(DividendType.STOCK) == "STOCK"
-        assert str(DividendType.REINVESTED) == "REINVESTED"
+        assert DividendType.CASH.value == "CASH"
+        assert DividendType.STOCK.value == "STOCK"
+        assert DividendType.REINVESTED.value == "REINVESTED"
 
 
 class TestTransactionType:
@@ -78,7 +78,7 @@ class TestTransactionType:
     
     def test_transaction_type_string_representation(self):
         """Test string representation of transaction types."""
-        assert str(TransactionType.BUY) == "BUY"
-        assert str(TransactionType.SELL) == "SELL"
-        assert str(TransactionType.DIVIDEND) == "DIVIDEND"
-        assert str(TransactionType.FEE) == "FEE"
+        assert TransactionType.BUY.value == "BUY"
+        assert TransactionType.SELL.value == "SELL"
+        assert TransactionType.DIVIDEND.value == "DIVIDEND"
+        assert TransactionType.FEE.value == "FEE"

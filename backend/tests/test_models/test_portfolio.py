@@ -324,13 +324,19 @@ class TestPortfolio:
     
     def test_top_holdings_property(self, sample_position_data):
         """Test top_holdings property returns top 10 positions by market value."""
-        # Create multiple positions with different market values
+        # Create multiple positions with different market values by varying current_price
         positions = []
         for i in range(12):  # Create more than 10 positions
             pos_data = sample_position_data.copy()
             pos_data["symbol"] = f"STOCK{i}"
             pos_data["name"] = f"Stock {i}"
-            pos_data["market_value"] = Decimal(str(1000 + i * 100))
+            # Set different current_price to get different market_value
+            # market_value = quantity * current_price = 10.5 * (100 + i * 10)
+            pos_data["current_price"] = Decimal(str(100 + i * 10))
+            # Set dummy values for required fields - they will be recalculated by validators
+            pos_data["market_value"] = Decimal("0")
+            pos_data["unrealized_pnl"] = Decimal("0")
+            pos_data["unrealized_pnl_pct"] = Decimal("0")
             positions.append(Position(**pos_data))
         
         # Create portfolio with individual positions
@@ -350,10 +356,15 @@ class TestPortfolio:
         
         top_holdings = portfolio.top_holdings
         assert len(top_holdings) == 10  # Should return only top 10
+        # Positions are sorted by market value descending
+        # STOCK11 has current_price = 100 + 11*10 = 210, market_value = 10.5 * 210 = 2205 (highest)
+        # STOCK10 has current_price = 100 + 10*10 = 200, market_value = 10.5 * 200 = 2100 (second highest)
+        # etc.
         assert top_holdings[0].symbol == "STOCK11"  # Highest market value
-        assert top_holdings[0].market_value == Decimal("2100")
-        assert top_holdings[-1].symbol == "STOCK2"  # 10th highest
-        assert top_holdings[-1].market_value == Decimal("1200")
+        assert top_holdings[0].market_value == Decimal("2205")  # 10.5 * 210
+        assert top_holdings[1].symbol == "STOCK10"  # Second highest
+        assert top_holdings[-1].symbol == "STOCK2"  # 10th highest (index 9)
+        assert top_holdings[-1].market_value == Decimal("1260")  # 10.5 * 120
     
     def test_json_serialization(self):
         """Test JSON serialization of portfolio."""

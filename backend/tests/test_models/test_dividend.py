@@ -258,8 +258,8 @@ class TestDividend:
         
         assert json_data["symbol"] == "AAPL"
         assert json_data["dividend_type"] == "CASH"
-        assert json_data["ex_dividend_date"] == "2024-01-10"
-        assert json_data["payment_date"] == "2024-01-25"
+        assert str(json_data["ex_dividend_date"]) == "2024-01-10"
+        assert str(json_data["payment_date"]) == "2024-01-25"
         assert isinstance(json_data["created_at"], datetime)
     
     def test_all_dividend_types(self):

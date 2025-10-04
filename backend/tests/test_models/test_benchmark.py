@@ -443,8 +443,8 @@ class TestBenchmarkComparison:
         
         assert json_data["portfolio_id"] == "portfolio_123"
         assert json_data["benchmark_symbol"] == "SPY"
-        assert json_data["start_date"] == "2024-01-01"
-        assert json_data["end_date"] == "2024-01-31"
+        assert str(json_data["start_date"]) == "2024-01-01"
+        assert str(json_data["end_date"]) == "2024-01-31"
         assert json_data["portfolio_return"] == 8.50
         assert json_data["benchmark_return"] == 7.25
         assert json_data["excess_return"] == 1.25
