@@ -179,7 +179,7 @@ async def get_pie_allocation(
     pie_id: str = Path(..., description="Unique pie identifier"),
     user_id: str = Depends(get_current_user_id),
     api_key: str = Depends(get_trading212_api_key),
-    breakdown_type: str = Query("sector", regex="^(sector|country|asset_type|position)$", description="Type of allocation breakdown")
+    breakdown_type: str = Query("sector", regex="^(sector|industry|country|asset_type|position)$", description="Type of allocation breakdown")
 ) -> Any:
     """
     Get allocation breakdown for a specific pie
@@ -233,6 +233,20 @@ async def get_pie_allocation(
                     percentage = (value / total_value * 100) if total_value > 0 else 0
                     allocations.append({
                         "category": sector,
+                        "percentage": float(percentage),
+                        "value": float(value)
+                    })
+            elif breakdown_type == "industry":
+                # Industry allocation
+                industry_totals = {}
+                for position in pie.positions:
+                    industry = position.industry or "Unknown"
+                    industry_totals[industry] = industry_totals.get(industry, 0) + position.market_value
+                
+                for industry, value in industry_totals.items():
+                    percentage = (value / total_value * 100) if total_value > 0 else 0
+                    allocations.append({
+                        "category": industry,
                         "percentage": float(percentage),
                         "value": float(value)
                     })

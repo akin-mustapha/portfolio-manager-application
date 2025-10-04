@@ -6,7 +6,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 from decimal import Decimal
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Any
 from ..models.portfolio import Portfolio, PortfolioMetrics
 from ..models.pie import Pie, PieMetrics
 from ..models.position import Position
@@ -53,6 +53,7 @@ class CalculationsService:
         
         # Allocation calculations
         sector_allocation = self._calculate_sector_allocation(positions)
+        industry_allocation = self._calculate_industry_allocation(positions)
         country_allocation = self._calculate_country_allocation(positions)
         asset_type_allocation = self._calculate_asset_type_allocation(positions)
         
@@ -82,7 +83,13 @@ class CalculationsService:
             dividend_yield=dividend_metrics.get('dividend_yield', Decimal('0')),
             annual_dividend_projection=dividend_metrics.get('annual_projection', Decimal('0')),
             monthly_dividend_avg=dividend_metrics.get('monthly_avg', Decimal('0')),
+            reinvested_dividends=dividend_metrics.get('reinvested_dividends', Decimal('0')),
+            withdrawn_dividends=dividend_metrics.get('withdrawn_dividends', Decimal('0')),
+            reinvestment_rate=dividend_metrics.get('reinvestment_rate', Decimal('0')),
+            trailing_12m_dividends=dividend_metrics.get('trailing_12m_dividends', Decimal('0')),
+            dividend_growth_rate=dividend_metrics.get('dividend_growth_rate', Decimal('0')),
             sector_allocation=sector_allocation,
+            industry_allocation=industry_allocation,
             country_allocation=country_allocation,
             asset_type_allocation=asset_type_allocation,
             diversification_score=diversification_score,
@@ -105,6 +112,22 @@ class CalculationsService:
         return {
             sector: (value / total_value * 100) 
             for sector, value in sector_values.items()
+        }
+    
+    def _calculate_industry_allocation(self, positions: List[Position]) -> Dict[str, Decimal]:
+        """Calculate allocation by industry."""
+        total_value = sum(pos.market_value for pos in positions)
+        if total_value == 0:
+            return {}
+        
+        industry_values = {}
+        for pos in positions:
+            industry = pos.industry or "Unknown"
+            industry_values[industry] = industry_values.get(industry, Decimal('0')) + pos.market_value
+        
+        return {
+            industry: (value / total_value * 100) 
+            for industry, value in industry_values.items()
         }
     
     def _calculate_country_allocation(self, positions: List[Position]) -> Dict[str, Decimal]:
@@ -173,46 +196,534 @@ class CalculationsService:
         return diversification_score, concentration_risk, top_10_weight
     
     def _calculate_dividend_metrics(self, dividends: List[Dividend], total_value: Decimal) -> Dict[str, Decimal]:
-        """Calculate dividend-related metrics."""
+        """Calculate comprehensive dividend-related metrics."""
         if not dividends:
             return {
                 'total_dividends': Decimal('0'),
                 'dividend_yield': Decimal('0'),
                 'annual_projection': Decimal('0'),
-                'monthly_avg': Decimal('0')
+                'monthly_avg': Decimal('0'),
+                'reinvested_dividends': Decimal('0'),
+                'withdrawn_dividends': Decimal('0'),
+                'reinvestment_rate': Decimal('0'),
+                'trailing_12m_dividends': Decimal('0'),
+                'dividend_growth_rate': Decimal('0')
             }
         
         # Total dividends received
         total_dividends = sum(div.total_amount for div in dividends)
         
-        # Current dividend yield
+        # Separate reinvested vs withdrawn dividends
+        reinvested_dividends = sum(div.total_amount for div in dividends if div.is_reinvested)
+        withdrawn_dividends = sum(div.total_amount for div in dividends if not div.is_reinvested)
+        
+        # Calculate reinvestment rate
+        reinvestment_rate = (reinvested_dividends / total_dividends * 100) if total_dividends > 0 else Decimal('0')
+        
+        # Current dividend yield based on total value
         dividend_yield = (total_dividends / total_value * 100) if total_value > 0 else Decimal('0')
         
-        # Calculate monthly average and annual projection
-        if dividends:
-            # Get dividends from last 12 months
-            one_year_ago = datetime.now() - timedelta(days=365)
-            recent_dividends = [
-                div for div in dividends 
-                if div.payment_date and div.payment_date >= one_year_ago.date()
-            ]
-            
-            if recent_dividends:
-                recent_total = sum(div.total_amount for div in recent_dividends)
-                monthly_avg = recent_total / 12
-                annual_projection = recent_total
-            else:
-                monthly_avg = Decimal('0')
-                annual_projection = Decimal('0')
-        else:
-            monthly_avg = Decimal('0')
-            annual_projection = Decimal('0')
+        # Calculate trailing 12 months metrics
+        one_year_ago = datetime.now() - timedelta(days=365)
+        recent_dividends = [
+            div for div in dividends 
+            if div.payment_date and div.payment_date >= one_year_ago.date()
+        ]
+        
+        trailing_12m_dividends = sum(div.total_amount for div in recent_dividends)
+        monthly_avg = trailing_12m_dividends / 12 if recent_dividends else Decimal('0')
+        annual_projection = trailing_12m_dividends
+        
+        # Calculate dividend growth rate (comparing last 12 months to previous 12 months)
+        two_years_ago = datetime.now() - timedelta(days=730)
+        previous_year_dividends = [
+            div for div in dividends 
+            if div.payment_date and two_years_ago.date() <= div.payment_date < one_year_ago.date()
+        ]
+        
+        previous_12m_total = sum(div.total_amount for div in previous_year_dividends)
+        dividend_growth_rate = Decimal('0')
+        if previous_12m_total > 0 and trailing_12m_dividends > 0:
+            dividend_growth_rate = ((trailing_12m_dividends - previous_12m_total) / previous_12m_total * 100)
         
         return {
             'total_dividends': total_dividends,
             'dividend_yield': dividend_yield,
             'annual_projection': annual_projection,
-            'monthly_avg': monthly_avg
+            'monthly_avg': monthly_avg,
+            'reinvested_dividends': reinvested_dividends,
+            'withdrawn_dividends': withdrawn_dividends,
+            'reinvestment_rate': reinvestment_rate,
+            'trailing_12m_dividends': trailing_12m_dividends,
+            'dividend_growth_rate': dividend_growth_rate
+        }
+    
+    def calculate_dividend_income_analysis(
+        self, 
+        dividends: List[Dividend], 
+        positions: List[Position],
+        pie_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Calculate comprehensive dividend and income analysis.
+        
+        Args:
+            dividends: List of dividend records
+            positions: Current positions for yield calculations
+            pie_id: Optional pie ID to filter dividends
+            
+        Returns:
+            Comprehensive dividend analysis dictionary
+        """
+        if pie_id:
+            # Filter dividends for specific pie
+            dividends = [div for div in dividends if div.pie_id == pie_id]
+            # Filter positions for specific pie (would need pie context)
+        
+        if not dividends:
+            return self._get_empty_dividend_analysis()
+        
+        # Basic metrics
+        total_value = sum(pos.market_value for pos in positions)
+        dividend_metrics = self._calculate_dividend_metrics(dividends, total_value)
+        
+        # Monthly dividend history and trends
+        monthly_history = self._calculate_monthly_dividend_history(dividends)
+        
+        # Dividend by security analysis
+        dividend_by_security = self._calculate_dividend_by_security(dividends, positions)
+        
+        # Reinvestment analysis
+        reinvestment_analysis = self._calculate_reinvestment_analysis(dividends)
+        
+        # Income projections
+        income_projections = self._calculate_income_projections(dividends, positions)
+        
+        # Tax analysis
+        tax_analysis = self._calculate_dividend_tax_analysis(dividends)
+        
+        return {
+            'summary': dividend_metrics,
+            'monthly_history': monthly_history,
+            'by_security': dividend_by_security,
+            'reinvestment_analysis': reinvestment_analysis,
+            'income_projections': income_projections,
+            'tax_analysis': tax_analysis,
+            'analysis_date': datetime.utcnow().isoformat()
+        }
+    
+    def _calculate_monthly_dividend_history(self, dividends: List[Dividend]) -> List[Dict[str, Any]]:
+        """Calculate monthly dividend history for trend analysis."""
+        if not dividends:
+            return []
+        
+        # Group dividends by month
+        monthly_data = {}
+        for dividend in dividends:
+            if dividend.payment_date:
+                month_key = dividend.payment_date.strftime('%Y-%m')
+                if month_key not in monthly_data:
+                    monthly_data[month_key] = {
+                        'month': month_key,
+                        'total_amount': Decimal('0'),
+                        'reinvested_amount': Decimal('0'),
+                        'withdrawn_amount': Decimal('0'),
+                        'dividend_count': 0,
+                        'securities_count': set()
+                    }
+                
+                monthly_data[month_key]['total_amount'] += dividend.total_amount
+                monthly_data[month_key]['dividend_count'] += 1
+                monthly_data[month_key]['securities_count'].add(dividend.symbol)
+                
+                if dividend.is_reinvested:
+                    monthly_data[month_key]['reinvested_amount'] += dividend.total_amount
+                else:
+                    monthly_data[month_key]['withdrawn_amount'] += dividend.total_amount
+        
+        # Convert to list and calculate additional metrics
+        monthly_history = []
+        for month_key in sorted(monthly_data.keys()):
+            data = monthly_data[month_key]
+            monthly_history.append({
+                'month': month_key,
+                'total_amount': float(data['total_amount']),
+                'reinvested_amount': float(data['reinvested_amount']),
+                'withdrawn_amount': float(data['withdrawn_amount']),
+                'dividend_count': data['dividend_count'],
+                'securities_count': len(data['securities_count']),
+                'reinvestment_rate': float(data['reinvested_amount'] / data['total_amount'] * 100) if data['total_amount'] > 0 else 0
+            })
+        
+        # Add trend analysis
+        if len(monthly_history) >= 2:
+            for i in range(1, len(monthly_history)):
+                current = monthly_history[i]['total_amount']
+                previous = monthly_history[i-1]['total_amount']
+                if previous > 0:
+                    monthly_history[i]['month_over_month_change'] = (current - previous) / previous * 100
+                else:
+                    monthly_history[i]['month_over_month_change'] = 0
+        
+        return monthly_history
+    
+    def _calculate_dividend_by_security(
+        self, 
+        dividends: List[Dividend], 
+        positions: List[Position]
+    ) -> List[Dict[str, Any]]:
+        """Calculate dividend analysis by individual security."""
+        if not dividends:
+            return []
+        
+        # Group dividends by security
+        security_data = {}
+        position_map = {pos.symbol: pos for pos in positions}
+        
+        for dividend in dividends:
+            symbol = dividend.symbol
+            if symbol not in security_data:
+                security_data[symbol] = {
+                    'symbol': symbol,
+                    'security_name': dividend.security_name,
+                    'total_dividends': Decimal('0'),
+                    'reinvested_dividends': Decimal('0'),
+                    'withdrawn_dividends': Decimal('0'),
+                    'dividend_count': 0,
+                    'last_dividend_date': None,
+                    'last_dividend_amount': Decimal('0'),
+                    'current_position_value': Decimal('0'),
+                    'current_yield': Decimal('0'),
+                    'trailing_12m_dividends': Decimal('0')
+                }
+            
+            data = security_data[symbol]
+            data['total_dividends'] += dividend.total_amount
+            data['dividend_count'] += 1
+            
+            if dividend.is_reinvested:
+                data['reinvested_dividends'] += dividend.total_amount
+            else:
+                data['withdrawn_dividends'] += dividend.total_amount
+            
+            # Track most recent dividend
+            if not data['last_dividend_date'] or dividend.payment_date > data['last_dividend_date']:
+                data['last_dividend_date'] = dividend.payment_date
+                data['last_dividend_amount'] = dividend.total_amount
+            
+            # Calculate trailing 12 months dividends
+            one_year_ago = datetime.now() - timedelta(days=365)
+            if dividend.payment_date and dividend.payment_date >= one_year_ago.date():
+                data['trailing_12m_dividends'] += dividend.total_amount
+        
+        # Add current position data and calculate yields
+        security_analysis = []
+        for symbol, data in security_data.items():
+            if symbol in position_map:
+                position = position_map[symbol]
+                data['current_position_value'] = position.market_value
+                data['current_shares'] = position.quantity
+                
+                # Calculate current yield based on trailing 12 months
+                if position.market_value > 0:
+                    data['current_yield'] = data['trailing_12m_dividends'] / position.market_value * 100
+            
+            # Calculate reinvestment rate
+            reinvestment_rate = Decimal('0')
+            if data['total_dividends'] > 0:
+                reinvestment_rate = data['reinvested_dividends'] / data['total_dividends'] * 100
+            
+            security_analysis.append({
+                'symbol': data['symbol'],
+                'security_name': data['security_name'],
+                'total_dividends': float(data['total_dividends']),
+                'reinvested_dividends': float(data['reinvested_dividends']),
+                'withdrawn_dividends': float(data['withdrawn_dividends']),
+                'reinvestment_rate': float(reinvestment_rate),
+                'dividend_count': data['dividend_count'],
+                'last_dividend_date': data['last_dividend_date'].isoformat() if data['last_dividend_date'] else None,
+                'last_dividend_amount': float(data['last_dividend_amount']),
+                'current_position_value': float(data['current_position_value']),
+                'current_shares': float(data.get('current_shares', 0)),
+                'current_yield': float(data['current_yield']),
+                'trailing_12m_dividends': float(data['trailing_12m_dividends'])
+            })
+        
+        # Sort by total dividends descending
+        return sorted(security_analysis, key=lambda x: x['total_dividends'], reverse=True)
+    
+    def _calculate_reinvestment_analysis(self, dividends: List[Dividend]) -> Dict[str, Any]:
+        """Calculate detailed reinvestment analysis."""
+        if not dividends:
+            return {
+                'total_reinvested': 0,
+                'total_withdrawn': 0,
+                'overall_reinvestment_rate': 0,
+                'reinvested_shares_acquired': 0,
+                'average_reinvestment_price': 0,
+                'reinvestment_by_security': []
+            }
+        
+        total_reinvested = sum(div.total_amount for div in dividends if div.is_reinvested)
+        total_withdrawn = sum(div.total_amount for div in dividends if not div.is_reinvested)
+        total_dividends = total_reinvested + total_withdrawn
+        
+        overall_reinvestment_rate = (total_reinvested / total_dividends * 100) if total_dividends > 0 else Decimal('0')
+        
+        # Calculate reinvested shares and average prices
+        total_reinvested_shares = sum(
+            div.reinvested_shares for div in dividends 
+            if div.is_reinvested and div.reinvested_shares
+        )
+        
+        # Calculate weighted average reinvestment price
+        total_reinvestment_value = Decimal('0')
+        total_shares = Decimal('0')
+        for div in dividends:
+            if div.is_reinvested and div.reinvested_shares and div.reinvestment_price:
+                value = div.reinvested_shares * div.reinvestment_price
+                total_reinvestment_value += value
+                total_shares += div.reinvested_shares
+        
+        average_reinvestment_price = (total_reinvestment_value / total_shares) if total_shares > 0 else Decimal('0')
+        
+        # Reinvestment by security
+        security_reinvestment = {}
+        for div in dividends:
+            symbol = div.symbol
+            if symbol not in security_reinvestment:
+                security_reinvestment[symbol] = {
+                    'symbol': symbol,
+                    'security_name': div.security_name,
+                    'total_dividends': Decimal('0'),
+                    'reinvested_amount': Decimal('0'),
+                    'withdrawn_amount': Decimal('0'),
+                    'reinvested_shares': Decimal('0')
+                }
+            
+            data = security_reinvestment[symbol]
+            data['total_dividends'] += div.total_amount
+            
+            if div.is_reinvested:
+                data['reinvested_amount'] += div.total_amount
+                if div.reinvested_shares:
+                    data['reinvested_shares'] += div.reinvested_shares
+            else:
+                data['withdrawn_amount'] += div.total_amount
+        
+        reinvestment_by_security = []
+        for symbol, data in security_reinvestment.items():
+            reinvestment_rate = (data['reinvested_amount'] / data['total_dividends'] * 100) if data['total_dividends'] > 0 else Decimal('0')
+            reinvestment_by_security.append({
+                'symbol': data['symbol'],
+                'security_name': data['security_name'],
+                'total_dividends': float(data['total_dividends']),
+                'reinvested_amount': float(data['reinvested_amount']),
+                'withdrawn_amount': float(data['withdrawn_amount']),
+                'reinvestment_rate': float(reinvestment_rate),
+                'reinvested_shares': float(data['reinvested_shares'])
+            })
+        
+        return {
+            'total_reinvested': float(total_reinvested),
+            'total_withdrawn': float(total_withdrawn),
+            'overall_reinvestment_rate': float(overall_reinvestment_rate),
+            'reinvested_shares_acquired': float(total_reinvested_shares),
+            'average_reinvestment_price': float(average_reinvestment_price),
+            'reinvestment_by_security': sorted(reinvestment_by_security, key=lambda x: x['reinvested_amount'], reverse=True)
+        }
+    
+    def _calculate_income_projections(
+        self, 
+        dividends: List[Dividend], 
+        positions: List[Position]
+    ) -> Dict[str, Any]:
+        """Calculate income projections based on historical data and current positions."""
+        if not dividends or not positions:
+            return {
+                'annual_projection': 0,
+                'quarterly_projection': 0,
+                'monthly_projection': 0,
+                'next_12_months_projection': 0,
+                'projection_by_security': [],
+                'confidence_level': 'low'
+            }
+        
+        # Calculate trailing 12 months for baseline projection
+        one_year_ago = datetime.now() - timedelta(days=365)
+        recent_dividends = [
+            div for div in dividends 
+            if div.payment_date and div.payment_date >= one_year_ago.date()
+        ]
+        
+        trailing_12m_total = sum(div.total_amount for div in recent_dividends)
+        
+        # Basic projections
+        annual_projection = trailing_12m_total
+        quarterly_projection = trailing_12m_total / 4
+        monthly_projection = trailing_12m_total / 12
+        
+        # Calculate projection by security based on current positions
+        position_map = {pos.symbol: pos for pos in positions}
+        security_projections = {}
+        
+        for div in recent_dividends:
+            symbol = div.symbol
+            if symbol not in security_projections:
+                security_projections[symbol] = {
+                    'symbol': symbol,
+                    'security_name': div.security_name,
+                    'trailing_12m_dividends': Decimal('0'),
+                    'current_position_value': Decimal('0'),
+                    'current_shares': Decimal('0'),
+                    'projected_annual_income': Decimal('0'),
+                    'current_yield': Decimal('0')
+                }
+            
+            security_projections[symbol]['trailing_12m_dividends'] += div.total_amount
+        
+        # Add current position data and calculate projections
+        projection_by_security = []
+        for symbol, data in security_projections.items():
+            if symbol in position_map:
+                position = position_map[symbol]
+                data['current_position_value'] = position.market_value
+                data['current_shares'] = position.quantity
+                
+                # Project based on current yield
+                if position.market_value > 0:
+                    data['current_yield'] = data['trailing_12m_dividends'] / position.market_value * 100
+                    data['projected_annual_income'] = data['trailing_12m_dividends']  # Assume same rate
+            
+            projection_by_security.append({
+                'symbol': data['symbol'],
+                'security_name': data['security_name'],
+                'trailing_12m_dividends': float(data['trailing_12m_dividends']),
+                'current_position_value': float(data['current_position_value']),
+                'current_shares': float(data['current_shares']),
+                'projected_annual_income': float(data['projected_annual_income']),
+                'current_yield': float(data['current_yield'])
+            })
+        
+        # Determine confidence level based on data availability
+        confidence_level = 'low'
+        if len(recent_dividends) >= 4:  # At least quarterly data
+            confidence_level = 'medium'
+        if len(recent_dividends) >= 12:  # Monthly data available
+            confidence_level = 'high'
+        
+        return {
+            'annual_projection': float(annual_projection),
+            'quarterly_projection': float(quarterly_projection),
+            'monthly_projection': float(monthly_projection),
+            'next_12_months_projection': float(annual_projection),
+            'projection_by_security': sorted(projection_by_security, key=lambda x: x['projected_annual_income'], reverse=True),
+            'confidence_level': confidence_level,
+            'data_points_used': len(recent_dividends)
+        }
+    
+    def _calculate_dividend_tax_analysis(self, dividends: List[Dividend]) -> Dict[str, Any]:
+        """Calculate tax-related dividend analysis."""
+        if not dividends:
+            return {
+                'total_gross_dividends': 0,
+                'total_tax_withheld': 0,
+                'total_net_dividends': 0,
+                'effective_tax_rate': 0,
+                'tax_by_country': [],
+                'tax_by_security': []
+            }
+        
+        total_gross = sum(div.gross_amount for div in dividends)
+        total_tax_withheld = sum(div.tax_withheld for div in dividends)
+        total_net = sum(div.net_amount for div in dividends)
+        
+        effective_tax_rate = (total_tax_withheld / total_gross * 100) if total_gross > 0 else Decimal('0')
+        
+        # Tax analysis by country (would need country data in dividend model)
+        # For now, return basic structure
+        tax_by_country = []
+        
+        # Tax analysis by security
+        security_tax = {}
+        for div in dividends:
+            symbol = div.symbol
+            if symbol not in security_tax:
+                security_tax[symbol] = {
+                    'symbol': symbol,
+                    'security_name': div.security_name,
+                    'gross_dividends': Decimal('0'),
+                    'tax_withheld': Decimal('0'),
+                    'net_dividends': Decimal('0')
+                }
+            
+            data = security_tax[symbol]
+            data['gross_dividends'] += div.gross_amount
+            data['tax_withheld'] += div.tax_withheld
+            data['net_dividends'] += div.net_amount
+        
+        tax_by_security = []
+        for symbol, data in security_tax.items():
+            effective_rate = (data['tax_withheld'] / data['gross_dividends'] * 100) if data['gross_dividends'] > 0 else Decimal('0')
+            tax_by_security.append({
+                'symbol': data['symbol'],
+                'security_name': data['security_name'],
+                'gross_dividends': float(data['gross_dividends']),
+                'tax_withheld': float(data['tax_withheld']),
+                'net_dividends': float(data['net_dividends']),
+                'effective_tax_rate': float(effective_rate)
+            })
+        
+        return {
+            'total_gross_dividends': float(total_gross),
+            'total_tax_withheld': float(total_tax_withheld),
+            'total_net_dividends': float(total_net),
+            'effective_tax_rate': float(effective_tax_rate),
+            'tax_by_country': tax_by_country,
+            'tax_by_security': sorted(tax_by_security, key=lambda x: x['tax_withheld'], reverse=True)
+        }
+    
+    def _get_empty_dividend_analysis(self) -> Dict[str, Any]:
+        """Return empty dividend analysis structure."""
+        return {
+            'summary': {
+                'total_dividends': 0,
+                'dividend_yield': 0,
+                'annual_projection': 0,
+                'monthly_avg': 0,
+                'reinvested_dividends': 0,
+                'withdrawn_dividends': 0,
+                'reinvestment_rate': 0,
+                'trailing_12m_dividends': 0,
+                'dividend_growth_rate': 0
+            },
+            'monthly_history': [],
+            'by_security': [],
+            'reinvestment_analysis': {
+                'total_reinvested': 0,
+                'total_withdrawn': 0,
+                'overall_reinvestment_rate': 0,
+                'reinvested_shares_acquired': 0,
+                'average_reinvestment_price': 0,
+                'reinvestment_by_security': []
+            },
+            'income_projections': {
+                'annual_projection': 0,
+                'quarterly_projection': 0,
+                'monthly_projection': 0,
+                'next_12_months_projection': 0,
+                'projection_by_security': [],
+                'confidence_level': 'low'
+            },
+            'tax_analysis': {
+                'total_gross_dividends': 0,
+                'total_tax_withheld': 0,
+                'total_net_dividends': 0,
+                'effective_tax_rate': 0,
+                'tax_by_country': [],
+                'tax_by_security': []
+            },
+            'analysis_date': datetime.utcnow().isoformat()
         }
     
     def _calculate_portfolio_returns(
@@ -508,6 +1019,7 @@ class CalculationsService:
         
         # Allocation calculations
         sector_allocation = self._calculate_sector_allocation(pie.positions)
+        industry_allocation = self._calculate_industry_allocation(pie.positions)
         country_allocation = self._calculate_country_allocation(pie.positions)
         asset_type_allocation = self._calculate_asset_type_allocation(pie.positions)
         
@@ -549,7 +1061,13 @@ class CalculationsService:
             dividend_yield=dividend_metrics.get('dividend_yield', Decimal('0')),
             annual_dividend_projection=dividend_metrics.get('annual_projection', Decimal('0')),
             monthly_dividend_avg=dividend_metrics.get('monthly_avg', Decimal('0')),
+            reinvested_dividends=dividend_metrics.get('reinvested_dividends', Decimal('0')),
+            withdrawn_dividends=dividend_metrics.get('withdrawn_dividends', Decimal('0')),
+            reinvestment_rate=dividend_metrics.get('reinvestment_rate', Decimal('0')),
+            trailing_12m_dividends=dividend_metrics.get('trailing_12m_dividends', Decimal('0')),
+            dividend_growth_rate=dividend_metrics.get('dividend_growth_rate', Decimal('0')),
             sector_allocation=sector_allocation,
+            industry_allocation=industry_allocation,
             country_allocation=country_allocation,
             asset_type_allocation=asset_type_allocation,
             risk_metrics=risk_metrics,
@@ -1235,6 +1753,7 @@ class CalculationsService:
             return {
                 'overall_score': Decimal('0'),
                 'sector_diversification': Decimal('0'),
+                'industry_diversification': Decimal('0'),
                 'geographical_diversification': Decimal('0'),
                 'asset_type_diversification': Decimal('0'),
                 'position_count_score': Decimal('0')
@@ -1245,6 +1764,7 @@ class CalculationsService:
             return {
                 'overall_score': Decimal('0'),
                 'sector_diversification': Decimal('0'),
+                'industry_diversification': Decimal('0'),
                 'geographical_diversification': Decimal('0'),
                 'asset_type_diversification': Decimal('0'),
                 'position_count_score': Decimal('0')
@@ -1258,6 +1778,15 @@ class CalculationsService:
         
         sector_hhi = sum(w ** 2 for w in sector_weights.values())
         sector_diversification = Decimal(str((1 - sector_hhi) * 100))
+        
+        # Industry diversification
+        industry_weights = {}
+        for pos in positions:
+            industry = pos.industry or "Unknown"
+            industry_weights[industry] = industry_weights.get(industry, Decimal('0')) + (pos.market_value / total_value)
+        
+        industry_hhi = sum(w ** 2 for w in industry_weights.values())
+        industry_diversification = Decimal(str((1 - industry_hhi) * 100))
         
         # Geographical diversification
         country_weights = {}
@@ -1288,15 +1817,17 @@ class CalculationsService:
         
         # Overall score (weighted average)
         overall_score = (
-            sector_diversification * Decimal('0.3') +
+            sector_diversification * Decimal('0.25') +
+            industry_diversification * Decimal('0.2') +
             geographical_diversification * Decimal('0.25') +
-            asset_type_diversification * Decimal('0.25') +
-            position_count_score * Decimal('0.2')
+            asset_type_diversification * Decimal('0.15') +
+            position_count_score * Decimal('0.15')
         )
         
         return {
             'overall_score': min(overall_score, Decimal('100')),
             'sector_diversification': sector_diversification,
+            'industry_diversification': industry_diversification,
             'geographical_diversification': geographical_diversification,
             'asset_type_diversification': asset_type_diversification,
             'position_count_score': position_count_score
@@ -1325,6 +1856,7 @@ class CalculationsService:
         
         # Calculate current allocations
         current_sector = self._calculate_sector_allocation(current_positions)
+        current_industry = self._calculate_industry_allocation(current_positions)
         current_country = self._calculate_country_allocation(current_positions)
         current_asset_type = self._calculate_asset_type_allocation(current_positions)
         
@@ -1350,6 +1882,26 @@ class CalculationsService:
                     drift_analysis['drift_detected'] = True
                     drift_analysis['recommendations'].append({
                         'type': 'sector_rebalancing',
+                        'category': category,
+                        'current': drift_data['current'],
+                        'target': drift_data['target'],
+                        'action': 'increase' if drift_data['drift'] < 0 else 'decrease'
+                    })
+        
+        # Check industry drift
+        if 'industry' in target_allocations:
+            industry_drift = self.calculate_allocation_drift(
+                current_industry, 
+                target_allocations['industry'], 
+                tolerance_pct
+            )
+            drift_analysis['category_drifts']['industry'] = industry_drift
+            
+            for category, drift_data in industry_drift.items():
+                if drift_data['needs_rebalancing']:
+                    drift_analysis['drift_detected'] = True
+                    drift_analysis['recommendations'].append({
+                        'type': 'industry_rebalancing',
                         'category': category,
                         'current': drift_data['current'],
                         'target': drift_data['target'],
@@ -1408,7 +1960,90 @@ class CalculationsService:
         if drift_count > 0:
             drift_analysis['total_drift_score'] = total_drift / drift_count
         
-        return drift_analysis  
+        return drift_analysis
+    
+    def calculate_comprehensive_allocation_analysis(
+        self,
+        positions: List[Position],
+        target_allocations: Optional[Dict[str, Dict[str, Decimal]]] = None,
+        tolerance_pct: Decimal = Decimal('5.0')
+    ) -> Dict[str, any]:
+        """
+        Calculate comprehensive allocation and diversification analysis.
+        
+        Args:
+            positions: List of positions to analyze
+            target_allocations: Optional target allocations for drift detection
+            tolerance_pct: Tolerance percentage for drift detection
+            
+        Returns:
+            Dictionary with comprehensive allocation analysis
+        """
+        if not positions:
+            return {
+                'allocations': {},
+                'diversification': {},
+                'concentration': {},
+                'top_holdings': [],
+                'drift_analysis': None
+            }
+        
+        # Calculate all allocation breakdowns
+        allocations = {
+            'sector': self._calculate_sector_allocation(positions),
+            'industry': self._calculate_industry_allocation(positions),
+            'country': self._calculate_country_allocation(positions),
+            'asset_type': self._calculate_asset_type_allocation(positions)
+        }
+        
+        # Calculate diversification scores
+        diversification = self.calculate_diversification_score(positions)
+        
+        # Calculate concentration analysis
+        concentration = self.calculate_concentration_analysis(positions)
+        
+        # Get top holdings with enhanced details
+        total_value = sum(pos.market_value for pos in positions)
+        sorted_positions = sorted(positions, key=lambda p: p.market_value, reverse=True)
+        
+        top_holdings = []
+        for i, pos in enumerate(sorted_positions[:20]):  # Top 20 holdings
+            weight = (pos.market_value / total_value * 100) if total_value > 0 else Decimal('0')
+            top_holdings.append({
+                'rank': i + 1,
+                'symbol': pos.symbol,
+                'name': pos.name,
+                'sector': pos.sector,
+                'industry': pos.industry,
+                'country': pos.country,
+                'asset_type': pos.asset_type.value,
+                'market_value': pos.market_value,
+                'weight': weight,
+                'unrealized_pnl': pos.unrealized_pnl,
+                'unrealized_pnl_pct': pos.unrealized_pnl_pct
+            })
+        
+        # Calculate drift analysis if target allocations provided
+        drift_analysis = None
+        if target_allocations:
+            drift_analysis = self.detect_allocation_drift(
+                positions, target_allocations, tolerance_pct
+            )
+        
+        return {
+            'allocations': allocations,
+            'diversification': diversification,
+            'concentration': concentration,
+            'top_holdings': top_holdings,
+            'drift_analysis': drift_analysis,
+            'summary': {
+                'total_positions': len(positions),
+                'total_value': total_value,
+                'diversification_score': diversification['overall_score'],
+                'concentration_level': concentration['concentration_level'],
+                'top_10_weight': concentration['concentration_buckets']['top_10']
+            }
+        }
   
     def calculate_comprehensive_dividend_analysis(
         self,

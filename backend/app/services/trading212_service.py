@@ -713,22 +713,76 @@ class Trading212Service:
             Dividend model instance
         """
         try:
+            # Parse dates
+            paid_on = raw_dividend.get("paidOn", datetime.utcnow().isoformat())
+            if isinstance(paid_on, str):
+                payment_date = datetime.fromisoformat(paid_on.replace('Z', '+00:00')).date()
+            else:
+                payment_date = datetime.utcnow().date()
+            
+            # Calculate amounts
+            total_amount = Decimal(str(raw_dividend.get("amount", 0)))
+            shares_held = Decimal(str(raw_dividend.get("quantity", 0)))
+            amount_per_share = total_amount / shares_held if shares_held > 0 else Decimal('0')
+            
+            # Tax calculations
+            gross_amount = Decimal(str(raw_dividend.get("grossAmountPerShare", amount_per_share))) * shares_held
+            tax_withheld = Decimal(str(raw_dividend.get("withholdingTax", 0)))
+            net_amount = gross_amount - tax_withheld
+            
+            # Currency handling
+            currency = raw_dividend.get("currency", "USD")
+            base_currency_amount = None
+            exchange_rate = None
+            
+            if "amountInEuro" in raw_dividend:
+                base_currency_amount = Decimal(str(raw_dividend["amountInEuro"].get("amount", 0)))
+                if total_amount > 0:
+                    exchange_rate = base_currency_amount / total_amount
+            
+            # Determine if reinvested (Trading 212 API may not provide this directly)
+            # For now, assume not reinvested unless specified
+            is_reinvested = raw_dividend.get("reinvested", False)
+            
             return Dividend(
                 symbol=raw_dividend.get("ticker", ""),
-                amount=Decimal(str(raw_dividend.get("amount", 0))),
-                currency=raw_dividend.get("amountInEuro", {}).get("currency", "EUR"),
-                amount_in_base=Decimal(str(raw_dividend.get("amountInEuro", {}).get("amount", 0))),
-                ex_date=datetime.fromisoformat(raw_dividend.get("paidOn", datetime.utcnow().isoformat())),
-                pay_date=datetime.fromisoformat(raw_dividend.get("paidOn", datetime.utcnow().isoformat())),
-                dividend_type=raw_dividend.get("type", "ORDINARY"),
-                quantity=Decimal(str(raw_dividend.get("quantity", 0))),
-                gross_amount=Decimal(str(raw_dividend.get("grossAmountPerShare", 0))),
-                withholding_tax=Decimal(str(raw_dividend.get("withholdingTax", 0))),
+                security_name=raw_dividend.get("name", raw_dividend.get("ticker", "")),
+                dividend_type=self._map_dividend_type(raw_dividend.get("type", "ORDINARY")),
+                amount_per_share=amount_per_share,
+                total_amount=total_amount,
+                shares_held=shares_held,
+                ex_dividend_date=payment_date,  # Trading 212 may not provide separate ex-date
+                payment_date=payment_date,
+                gross_amount=gross_amount,
+                tax_withheld=tax_withheld,
+                net_amount=net_amount,
+                currency=currency,
+                exchange_rate=exchange_rate,
+                base_currency_amount=base_currency_amount,
+                is_reinvested=is_reinvested,
                 created_at=datetime.utcnow()
             )
         except (KeyError, ValueError, TypeError) as e:
             logger.error(f"Failed to transform dividend data: {e}")
             raise Trading212APIError(f"Invalid dividend data: {e}")
+    
+    def _map_dividend_type(self, trading212_type: str) -> str:
+        """
+        Map Trading 212 dividend type to internal dividend type.
+        
+        Args:
+            trading212_type: Dividend type from Trading 212
+            
+        Returns:
+            Internal dividend type
+        """
+        type_mapping = {
+            "ORDINARY": "ORDINARY",
+            "SPECIAL": "SPECIAL", 
+            "QUALIFIED": "QUALIFIED",
+            "UNQUALIFIED": "UNQUALIFIED"
+        }
+        return type_mapping.get(trading212_type.upper(), "ORDINARY")
     
     def _transform_historical_data(self, raw_data: List[Dict[str, Any]], symbol: str) -> HistoricalData:
         """

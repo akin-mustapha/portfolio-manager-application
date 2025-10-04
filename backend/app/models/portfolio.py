@@ -30,9 +30,15 @@ class PortfolioMetrics(BaseModel):
     dividend_yield: Decimal = Field(default=Decimal('0'), ge=0, description="Portfolio dividend yield")
     annual_dividend_projection: Decimal = Field(default=Decimal('0'), ge=0, description="Projected annual dividends")
     monthly_dividend_avg: Decimal = Field(default=Decimal('0'), ge=0, description="Average monthly dividends")
+    reinvested_dividends: Decimal = Field(default=Decimal('0'), ge=0, description="Total reinvested dividends")
+    withdrawn_dividends: Decimal = Field(default=Decimal('0'), ge=0, description="Total withdrawn dividends")
+    reinvestment_rate: Decimal = Field(default=Decimal('0'), ge=0, le=100, description="Dividend reinvestment rate percentage")
+    trailing_12m_dividends: Decimal = Field(default=Decimal('0'), ge=0, description="Trailing 12 months dividends")
+    dividend_growth_rate: Decimal = Field(default=Decimal('0'), description="Year-over-year dividend growth rate")
     
     # Allocation metrics
     sector_allocation: Dict[str, Decimal] = Field(default_factory=dict, description="Allocation by sector")
+    industry_allocation: Dict[str, Decimal] = Field(default_factory=dict, description="Allocation by industry")
     country_allocation: Dict[str, Decimal] = Field(default_factory=dict, description="Allocation by country")
     asset_type_allocation: Dict[str, Decimal] = Field(default_factory=dict, description="Allocation by asset type")
     

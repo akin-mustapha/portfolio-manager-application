@@ -1,10 +1,12 @@
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Dict
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from datetime import datetime, timedelta
+from decimal import Decimal
 import asyncio
 
 from app.core.deps import get_trading212_api_key, get_current_user_id, get_redis
 from app.services.trading212_service import Trading212Service, Trading212APIError
+from app.services.calculations_service import CalculationsService
 from app.models.portfolio import Portfolio, PortfolioMetrics
 from app.models.position import Position
 from app.models.pie import Pie
@@ -208,7 +210,7 @@ async def get_top_holdings(
 async def get_portfolio_allocation(
     user_id: str = Depends(get_current_user_id),
     api_key: str = Depends(get_trading212_api_key),
-    breakdown_type: str = Query("sector", regex="^(sector|country|asset_type)$", description="Type of allocation breakdown")
+    breakdown_type: str = Query("sector", regex="^(sector|industry|country|asset_type)$", description="Type of allocation breakdown")
 ) -> Any:
     """
     Get portfolio allocation breakdown by sector, country, or asset type
@@ -232,6 +234,8 @@ async def get_portfolio_allocation(
             
             if breakdown_type == "sector":
                 allocation = portfolio.metrics.sector_allocation
+            elif breakdown_type == "industry":
+                allocation = portfolio.metrics.industry_allocation
             elif breakdown_type == "country":
                 allocation = portfolio.metrics.country_allocation
             elif breakdown_type == "asset_type":
@@ -442,4 +446,199 @@ async def get_portfolio_pies(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch pies: {str(e)}"
+        )
+
+@router.get("/diversification")
+async def get_portfolio_diversification_analysis(
+    user_id: str = Depends(get_current_user_id),
+    api_key: str = Depends(get_trading212_api_key)
+) -> Any:
+    """
+    Get comprehensive diversification analysis for the portfolio
+    """
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Trading 212 API key not configured"
+        )
+    
+    try:
+        async with Trading212Service() as service:
+            auth_result = await service.authenticate(api_key)
+            if not auth_result.success:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail=f"Trading 212 authentication failed: {auth_result.message}"
+                )
+            
+            portfolio = await service.fetch_portfolio_data()
+            calc_service = CalculationsService()
+            
+            # Calculate diversification scores
+            diversification = calc_service.calculate_diversification_score(portfolio.all_positions)
+            
+            return {
+                "diversification_scores": diversification,
+                "total_positions": len(portfolio.all_positions),
+                "total_value": float(portfolio.metrics.total_value)
+            }
+            
+    except Trading212APIError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Trading 212 API error: {e.message}"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch diversification analysis: {str(e)}"
+        )
+
+
+@router.get("/concentration")
+async def get_portfolio_concentration_analysis(
+    user_id: str = Depends(get_current_user_id),
+    api_key: str = Depends(get_trading212_api_key)
+) -> Any:
+    """
+    Get concentration risk analysis for the portfolio
+    """
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Trading 212 API key not configured"
+        )
+    
+    try:
+        async with Trading212Service() as service:
+            auth_result = await service.authenticate(api_key)
+            if not auth_result.success:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail=f"Trading 212 authentication failed: {auth_result.message}"
+                )
+            
+            portfolio = await service.fetch_portfolio_data()
+            calc_service = CalculationsService()
+            
+            # Calculate concentration analysis
+            concentration = calc_service.calculate_concentration_analysis(portfolio.all_positions)
+            
+            return concentration
+            
+    except Trading212APIError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Trading 212 API error: {e.message}"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch concentration analysis: {str(e)}"
+        )
+
+
+@router.get("/allocation-analysis")
+async def get_comprehensive_allocation_analysis(
+    user_id: str = Depends(get_current_user_id),
+    api_key: str = Depends(get_trading212_api_key)
+) -> Any:
+    """
+    Get comprehensive allocation and diversification analysis
+    """
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Trading 212 API key not configured"
+        )
+    
+    try:
+        async with Trading212Service() as service:
+            auth_result = await service.authenticate(api_key)
+            if not auth_result.success:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail=f"Trading 212 authentication failed: {auth_result.message}"
+                )
+            
+            portfolio = await service.fetch_portfolio_data()
+            calc_service = CalculationsService()
+            
+            # Calculate comprehensive allocation analysis
+            analysis = calc_service.calculate_comprehensive_allocation_analysis(portfolio.all_positions)
+            
+            return analysis
+            
+    except Trading212APIError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Trading 212 API error: {e.message}"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch allocation analysis: {str(e)}"
+        )
+
+
+@router.post("/allocation-drift")
+async def detect_allocation_drift(
+    target_allocations: Dict[str, Dict[str, float]],
+    user_id: str = Depends(get_current_user_id),
+    api_key: str = Depends(get_trading212_api_key),
+    tolerance_pct: float = Query(5.0, ge=0.1, le=50.0, description="Tolerance percentage for drift detection")
+) -> Any:
+    """
+    Detect allocation drift from target allocations and get rebalancing recommendations
+    
+    Expected format for target_allocations:
+    {
+        "sector": {"Technology": 30.0, "Healthcare": 20.0, ...},
+        "country": {"US": 60.0, "UK": 20.0, ...},
+        "asset_type": {"STOCK": 80.0, "ETF": 20.0}
+    }
+    """
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Trading 212 API key not configured"
+        )
+    
+    try:
+        async with Trading212Service() as service:
+            auth_result = await service.authenticate(api_key)
+            if not auth_result.success:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail=f"Trading 212 authentication failed: {auth_result.message}"
+                )
+            
+            portfolio = await service.fetch_portfolio_data()
+            calc_service = CalculationsService()
+            
+            # Convert float values to Decimal for calculations
+            decimal_targets = {}
+            for category, allocations in target_allocations.items():
+                decimal_targets[category] = {
+                    k: Decimal(str(v)) for k, v in allocations.items()
+                }
+            
+            # Detect allocation drift
+            drift_analysis = calc_service.detect_allocation_drift(
+                portfolio.all_positions, 
+                decimal_targets, 
+                Decimal(str(tolerance_pct))
+            )
+            
+            return drift_analysis
+            
+    except Trading212APIError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Trading 212 API error: {e.message}"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to detect allocation drift: {str(e)}"
         )

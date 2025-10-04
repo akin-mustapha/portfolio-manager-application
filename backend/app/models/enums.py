@@ -25,9 +25,13 @@ class RiskCategory(str, Enum):
 
 class DividendType(str, Enum):
     """Type of dividend payment."""
-    CASH = "CASH"
+    ORDINARY = "ORDINARY"
+    SPECIAL = "SPECIAL"
+    QUALIFIED = "QUALIFIED"
+    UNQUALIFIED = "UNQUALIFIED"
     STOCK = "STOCK"
     REINVESTED = "REINVESTED"
+    CASH = "CASH"  # Backward compatibility
 
 
 class TransactionType(str, Enum):
