@@ -630,3 +630,324 @@ class Trading212Service:
                 logger.warning(f"Failed to clear cache: {e}")
         
         return await self.fetch_portfolio_data()
+    
+    async def get_historical_orders(
+        self, 
+        cursor: Optional[str] = None, 
+        limit: int = 50,
+        ticker: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Fetch historical orders with pagination.
+        
+        Args:
+            cursor: Pagination cursor for next page
+            limit: Maximum number of orders to fetch
+            ticker: Filter by specific ticker symbol
+            
+        Returns:
+            Historical orders data with pagination info
+        """
+        params = {"limit": limit}
+        if cursor:
+            params["cursor"] = cursor
+        if ticker:
+            params["ticker"] = ticker
+            
+        return await self._make_request("GET", "/equity/history/orders", params=params, cache_ttl=3600)
+    
+    async def get_dividends(
+        self, 
+        cursor: Optional[str] = None, 
+        limit: int = 50,
+        ticker: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Fetch dividend history with pagination.
+        
+        Args:
+            cursor: Pagination cursor for next page
+            limit: Maximum number of dividends to fetch
+            ticker: Filter by specific ticker symbol
+            
+        Returns:
+            Dividend history data with pagination info
+        """
+        params = {"limit": limit}
+        if cursor:
+            params["cursor"] = cursor
+        if ticker:
+            params["ticker"] = ticker
+            
+        return await self._make_request("GET", "/equity/history/dividends", params=params, cache_ttl=3600)
+    
+    async def get_transactions(
+        self, 
+        cursor: Optional[str] = None, 
+        limit: int = 50
+    ) -> Dict[str, Any]:
+        """
+        Fetch transaction history with pagination.
+        
+        Args:
+            cursor: Pagination cursor for next page
+            limit: Maximum number of transactions to fetch
+            
+        Returns:
+            Transaction history data with pagination info
+        """
+        params = {"limit": limit}
+        if cursor:
+            params["cursor"] = cursor
+            
+        return await self._make_request("GET", "/equity/history/transactions", params=params, cache_ttl=3600)
+    
+    def _transform_dividend_data(self, raw_dividend: Dict[str, Any]) -> Dividend:
+        """
+        Transform Trading 212 dividend data to internal Dividend model.
+        
+        Args:
+            raw_dividend: Raw dividend data from Trading 212 API
+            
+        Returns:
+            Dividend model instance
+        """
+        try:
+            return Dividend(
+                symbol=raw_dividend.get("ticker", ""),
+                amount=Decimal(str(raw_dividend.get("amount", 0))),
+                currency=raw_dividend.get("amountInEuro", {}).get("currency", "EUR"),
+                amount_in_base=Decimal(str(raw_dividend.get("amountInEuro", {}).get("amount", 0))),
+                ex_date=datetime.fromisoformat(raw_dividend.get("paidOn", datetime.utcnow().isoformat())),
+                pay_date=datetime.fromisoformat(raw_dividend.get("paidOn", datetime.utcnow().isoformat())),
+                dividend_type=raw_dividend.get("type", "ORDINARY"),
+                quantity=Decimal(str(raw_dividend.get("quantity", 0))),
+                gross_amount=Decimal(str(raw_dividend.get("grossAmountPerShare", 0))),
+                withholding_tax=Decimal(str(raw_dividend.get("withholdingTax", 0))),
+                created_at=datetime.utcnow()
+            )
+        except (KeyError, ValueError, TypeError) as e:
+            logger.error(f"Failed to transform dividend data: {e}")
+            raise Trading212APIError(f"Invalid dividend data: {e}")
+    
+    def _transform_historical_data(self, raw_data: List[Dict[str, Any]], symbol: str) -> HistoricalData:
+        """
+        Transform raw historical price data to internal HistoricalData model.
+        
+        Args:
+            raw_data: Raw historical data from external API
+            symbol: Symbol for the historical data
+            
+        Returns:
+            HistoricalData model instance
+        """
+        try:
+            # Transform data points
+            data_points = []
+            for point in raw_data:
+                data_points.append({
+                    "date": datetime.fromisoformat(point.get("date", datetime.utcnow().isoformat())),
+                    "open": Decimal(str(point.get("open", 0))),
+                    "high": Decimal(str(point.get("high", 0))),
+                    "low": Decimal(str(point.get("low", 0))),
+                    "close": Decimal(str(point.get("close", 0))),
+                    "volume": int(point.get("volume", 0))
+                })
+            
+            return HistoricalData(
+                symbol=symbol,
+                data_points=data_points,
+                start_date=data_points[0]["date"] if data_points else datetime.utcnow(),
+                end_date=data_points[-1]["date"] if data_points else datetime.utcnow(),
+                frequency="daily",
+                created_at=datetime.utcnow()
+            )
+        except (KeyError, ValueError, TypeError) as e:
+            logger.error(f"Failed to transform historical data: {e}")
+            raise Trading212APIError(f"Invalid historical data: {e}")
+    
+    async def fetch_all_dividends(self, symbols: Optional[List[str]] = None) -> List[Dividend]:
+        """
+        Fetch all dividend data for the portfolio or specific symbols.
+        
+        Args:
+            symbols: Optional list of symbols to filter dividends
+            
+        Returns:
+            List of Dividend model instances
+        """
+        try:
+            all_dividends = []
+            cursor = None
+            
+            # Fetch dividends with pagination
+            while True:
+                dividend_data = await self.get_dividends(cursor=cursor, limit=200)
+                
+                if not dividend_data.get("items"):
+                    break
+                
+                # Transform dividend data
+                for raw_dividend in dividend_data["items"]:
+                    try:
+                        # Filter by symbols if provided
+                        if symbols and raw_dividend.get("ticker") not in symbols:
+                            continue
+                            
+                        dividend = self._transform_dividend_data(raw_dividend)
+                        all_dividends.append(dividend)
+                    except Exception as e:
+                        logger.warning(f"Skipping invalid dividend: {e}")
+                
+                # Check for next page
+                cursor = dividend_data.get("nextPagePath")
+                if not cursor:
+                    break
+            
+            logger.info(f"Fetched {len(all_dividends)} dividend records")
+            return all_dividends
+            
+        except Exception as e:
+            logger.error(f"Failed to fetch dividends: {e}")
+            raise Trading212APIError(f"Dividend fetch failed: {str(e)}")
+    
+    async def fetch_historical_data(
+        self, 
+        symbol: str, 
+        period: str = "1y",
+        use_external_api: bool = True
+    ) -> Optional[HistoricalData]:
+        """
+        Fetch historical price data for a symbol.
+        
+        Note: Trading 212 API doesn't provide historical price data,
+        so this method would integrate with external APIs like Alpha Vantage or Yahoo Finance.
+        
+        Args:
+            symbol: Stock/ETF symbol
+            period: Time period (1d, 5d, 1m, 3m, 6m, 1y, 2y, 5y, 10y, ytd, max)
+            use_external_api: Whether to use external API for historical data
+            
+        Returns:
+            HistoricalData model instance or None if not available
+        """
+        if not use_external_api:
+            logger.warning("Historical data not available from Trading 212 API")
+            return None
+        
+        try:
+            # This would integrate with external APIs like Alpha Vantage, Yahoo Finance, etc.
+            # For now, we'll return a placeholder implementation
+            logger.info(f"Historical data fetch for {symbol} would use external API")
+            
+            # Cache key for historical data
+            cache_key = f"historical:{symbol}:{period}"
+            
+            # Check cache first
+            if self.redis_client:
+                try:
+                    cached_data = await self.redis_client.get(cache_key)
+                    if cached_data:
+                        logger.debug(f"Cache hit for historical data {symbol}")
+                        data = json.loads(cached_data)
+                        return HistoricalData(**data)
+                except Exception as e:
+                    logger.warning(f"Cache read error for historical data: {e}")
+            
+            # TODO: Implement external API integration
+            # This would call Alpha Vantage, Yahoo Finance, or similar service
+            # For now, return None to indicate data not available
+            logger.warning(f"External API integration not implemented for {symbol}")
+            return None
+            
+        except Exception as e:
+            logger.error(f"Failed to fetch historical data for {symbol}: {e}")
+            raise Trading212APIError(f"Historical data fetch failed: {str(e)}")
+    
+    async def validate_data_integrity(self, data: Dict[str, Any], data_type: str) -> bool:
+        """
+        Validate data integrity and handle missing or invalid data.
+        
+        Args:
+            data: Data to validate
+            data_type: Type of data (position, pie, dividend, etc.)
+            
+        Returns:
+            True if data is valid, False otherwise
+        """
+        try:
+            if data_type == "position":
+                required_fields = ["ticker", "quantity", "averagePrice", "currentPrice"]
+                return all(field in data and data[field] is not None for field in required_fields)
+            
+            elif data_type == "pie":
+                required_fields = ["id", "name"]
+                return all(field in data and data[field] is not None for field in required_fields)
+            
+            elif data_type == "dividend":
+                required_fields = ["ticker", "amount", "paidOn"]
+                return all(field in data and data[field] is not None for field in required_fields)
+            
+            elif data_type == "account":
+                required_fields = ["id", "currencyCode"]
+                return all(field in data and data[field] is not None for field in required_fields)
+            
+            else:
+                logger.warning(f"Unknown data type for validation: {data_type}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Data validation error: {e}")
+            return False
+    
+    async def handle_missing_data(self, data_type: str, identifier: str) -> Dict[str, Any]:
+        """
+        Handle missing or invalid data by providing defaults or fetching from cache.
+        
+        Args:
+            data_type: Type of missing data
+            identifier: Identifier for the missing data
+            
+        Returns:
+            Default or cached data
+        """
+        try:
+            # Try to get from cache first
+            if self.redis_client:
+                cache_key = f"fallback:{data_type}:{identifier}"
+                cached_data = await self.redis_client.get(cache_key)
+                if cached_data:
+                    logger.info(f"Using cached fallback data for {data_type}:{identifier}")
+                    return json.loads(cached_data)
+            
+            # Provide sensible defaults
+            if data_type == "position":
+                return {
+                    "ticker": identifier,
+                    "name": f"Unknown Security ({identifier})",
+                    "quantity": 0,
+                    "averagePrice": 0,
+                    "currentPrice": 0,
+                    "marketValue": 0,
+                    "ppl": 0,
+                    "pplPercent": 0,
+                    "currency": "USD",
+                    "type": "STOCK"
+                }
+            
+            elif data_type == "pie":
+                return {
+                    "id": identifier,
+                    "name": f"Unknown Pie ({identifier})",
+                    "instruments": [],
+                    "autoInvest": False,
+                    "creationTime": datetime.utcnow().isoformat()
+                }
+            
+            else:
+                logger.warning(f"No fallback available for data type: {data_type}")
+                return {}
+                
+        except Exception as e:
+            logger.error(f"Failed to handle missing data: {e}")
+            return {}

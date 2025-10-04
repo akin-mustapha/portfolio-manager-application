@@ -1,16 +1,36 @@
+# Core FastAPI dependencies
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
+
+# Pydantic for data validation
 pydantic==2.5.0
 pydantic-settings==2.1.0
+
+# Database dependencies
 sqlalchemy==2.0.23
 alembic==1.13.1
 asyncpg==0.29.0
+psycopg2-binary==2.9.9
+
+# Redis for caching
 redis==5.0.1
+
+# Authentication and security
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
-python-multipart==0.0.6
+cryptography>=41.0.0
+
+# HTTP client and file handling
 httpx==0.25.2
+python-multipart==0.0.6
+
+# Data processing
 pandas==2.1.4
 numpy==1.25.2
+
+# Configuration
 python-dotenv==1.0.0
-cryptography==41.0.8
+
+# Additional dependencies for compatibility
+typing-extensions>=4.8.0
+annotated-types>=0.4.0

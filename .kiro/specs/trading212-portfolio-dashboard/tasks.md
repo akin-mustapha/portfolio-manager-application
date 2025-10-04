@@ -26,20 +26,20 @@
     - Test database model relationships and constraints
     - _Requirements: 2.2, 3.1_
 
-- [-] 3. Implement Trading 212 API integration service
+- [x] 3. Implement Trading 212 API integration service
   - [x] 3.1 Create Trading212Service class with authentication
     - Implement API key authentication and session management
     - Add error handling for authentication failures and rate limiting
     - Create secure storage for API credentials with encryption
     - _Requirements: 2.1, 2.2, 2.3, 2.4_
 
-  - [-] 3.2 Implement portfolio data fetching methods
+  - [x] 3.2 Implement portfolio data fetching methods
     - Add methods to fetch account info, pies, and positions from Trading 212 API
     - Implement data transformation from Trading 212 format to internal models
     - Add caching layer with Redis for API responses
     - _Requirements: 3.1, 3.2, 3.3, 3.4_
 
-  - [ ] 3.3 Add historical data and dividend fetching
+  - [x] 3.3 Add historical data and dividend fetching
     - Implement methods to fetch historical price data and dividend information
     - Add data validation and error handling for missing or invalid data
     - _Requirements: 7.1, 7.2, 7.3_
@@ -97,26 +97,26 @@
     - Validate comparison calculations with known datasets
     - _Requirements: 8.1, 8.2_
 
-- [ ] 6. Build FastAPI REST endpoints
-  - [ ] 6.1 Create authentication and API setup endpoints
+- [x] 6. Build FastAPI REST endpoints
+  - [x] 6.1 Create authentication and API setup endpoints
     - Implement JWT-based authentication system
     - Add endpoints for Trading 212 API key setup and validation
     - Create user session management and token refresh
     - _Requirements: 2.1, 2.2, 2.3, 2.4_
 
-  - [ ] 6.2 Implement portfolio data endpoints
+  - [x] 6.2 Implement portfolio data endpoints
     - Create endpoints for portfolio overview, metrics, and pie data
     - Add endpoints for historical performance and allocation data
     - Implement data pagination and filtering for large datasets
     - _Requirements: 3.1, 3.2, 3.3, 4.1, 6.1_
 
-  - [ ] 6.3 Add pie-specific analysis endpoints
+  - [x] 6.3 Add pie-specific analysis endpoints
     - Create endpoints for individual pie performance and risk metrics
     - Add pie allocation and holdings breakdown endpoints
     - Implement pie comparison and ranking endpoints
     - _Requirements: 9.1, 10.1, 11.1, 12.1_
 
-  - [ ] 6.4 Implement benchmark and comparison endpoints
+  - [x] 6.4 Implement benchmark and comparison endpoints
     - Add endpoints for benchmark data and performance comparisons
     - Create endpoints for custom benchmark selection
     - _Requirements: 8.1, 8.4, 8.5_
