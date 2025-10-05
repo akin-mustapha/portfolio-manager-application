@@ -19,13 +19,13 @@ import pandas as pd
 import numpy as np
 from pydantic import BaseModel, ValidationError
 
-from ..core.config import settings
-from ..models.benchmark import (
+from core.config import settings
+from models.benchmark import (
     BenchmarkInfo, BenchmarkData, BenchmarkDataPoint, BenchmarkComparison,
     CustomBenchmark, BenchmarkAnalysis
 )
-from ..models.portfolio import Portfolio
-from ..models.pie import Pie
+from models.portfolio import Portfolio
+from models.pie import Pie
 
 
 logger = logging.getLogger(__name__)

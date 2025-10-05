@@ -4,11 +4,11 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 import logging
 
-from app.core.deps import get_trading212_api_key, get_current_user_id
-from app.core.config import settings
-from app.services.trading212_service import Trading212Service, Trading212APIError
-from app.services.benchmark_service import BenchmarkService, BenchmarkAPIError
-from app.models.benchmark import BenchmarkData, BenchmarkComparison, BenchmarkInfo
+from core.deps import get_trading212_api_key, get_current_user_id
+from core.config import settings
+from services.trading212_service import Trading212Service, Trading212APIError
+from services.benchmark_service import BenchmarkService, BenchmarkAPIError
+from models.benchmark import BenchmarkData, BenchmarkComparison, BenchmarkInfo
 
 logger = logging.getLogger(__name__)
 

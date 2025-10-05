@@ -51,7 +51,9 @@ graph TB
 
 **Frontend:**
 - React 18 with TypeScript for type safety
-- Tailwind CSS for responsive styling
+- Tailwind CSS for responsive styling with modern design system
+- Framer Motion for smooth animations and micro-interactions
+- Lucide React for consistent iconography
 - Chart.js or Recharts for financial visualizations
 - React Query for data fetching and caching
 - React Router for navigation
@@ -67,6 +69,111 @@ graph TB
 - Trading 212 API for portfolio data
 - Alpha Vantage or Yahoo Finance for benchmark data
 - Market data APIs for real-time pricing
+
+## Modern UI Design System
+
+### Design Principles
+- **Smooth Animations**: All interactions use Framer Motion for fluid, spring-based animations
+- **Backdrop Blur Effects**: Modern glassmorphism with backdrop-blur for depth and sophistication
+- **Micro-interactions**: Subtle hover states, scale transforms, and transition effects
+- **Gradient Accents**: Strategic use of gradients for visual hierarchy and modern appeal
+- **Consistent Iconography**: Lucide React icons for clean, consistent visual language
+- **Responsive Animations**: Animations that adapt to screen size and user preferences
+
+### Animation Patterns
+```typescript
+type AnimationStyle = 
+  | "from-bottom" | "from-center" | "from-top" 
+  | "from-left" | "from-right" | "fade"
+  | "top-in-bottom-out" | "left-in-right-out"
+
+interface AnimationConfig {
+  initial: MotionProps;
+  animate: MotionProps;
+  exit: MotionProps;
+  transition: {
+    type: "spring";
+    damping: number;
+    stiffness: number;
+  };
+}
+
+// Standard animation variants for consistency
+const standardAnimations = {
+  cardHover: { scale: 1.02, y: -2 },
+  buttonHover: { scale: 1.05 },
+  iconHover: { scale: 1.1, rotate: 5 },
+  backdropBlur: "backdrop-blur-md",
+  shadowLevels: ["shadow-sm", "shadow-md", "shadow-lg", "shadow-xl"]
+}
+```
+
+### Color System & Gradients
+```typescript
+interface ColorSystem {
+  primary: {
+    gradient: "from-primary/30 to-primary";
+    background: "bg-primary/10";
+    text: "text-primary";
+    border: "border-primary/20";
+  };
+  
+  neutral: {
+    glass: "bg-neutral-900/50 dark:bg-neutral-100/50";
+    backdrop: "bg-black/50";
+    border: "border-neutral-200 dark:border-neutral-800";
+  };
+  
+  interactive: {
+    hover: "group-hover:brightness-[0.8]";
+    focus: "focus:ring-2 focus:ring-primary/50";
+    active: "active:scale-95";
+  };
+}
+```
+
+### Icon System with Lucide React
+```typescript
+// Financial Dashboard Icon Mapping
+interface FinancialIcons {
+  // Performance & Trends
+  TrendingUp: LucideIcon;      // Positive performance
+  TrendingDown: LucideIcon;    // Negative performance
+  Activity: LucideIcon;        // Volatility/Activity
+  BarChart: LucideIcon;        // Charts/Analytics
+  PieChart: LucideIcon;        // Allocation views
+  LineChart: LucideIcon;       // Time series
+  
+  // Financial
+  DollarSign: LucideIcon;      // Currency/Value
+  Percent: LucideIcon;         // Percentages
+  Calculator: LucideIcon;      // Calculations
+  Target: LucideIcon;          // Goals/Targets
+  
+  // UI Controls (matching snippet style)
+  Play: LucideIcon;            // Play actions
+  X: LucideIcon;               // Close (XIcon in snippet)
+  Menu: LucideIcon;            // Navigation
+  Settings: LucideIcon;        // Configuration
+  Refresh: LucideIcon;         // Data refresh
+  Eye: LucideIcon;             // Show/visibility
+  EyeOff: LucideIcon;          // Hide
+  
+  // Status & Alerts
+  CheckCircle: LucideIcon;     // Success states
+  AlertTriangle: LucideIcon;   // Warnings
+  Info: LucideIcon;            // Information
+  AlertCircle: LucideIcon;     // Errors
+}
+
+interface IconWrapper {
+  icon: LucideIcon;
+  size?: "sm" | "md" | "lg" | "xl";
+  variant?: "default" | "hover" | "active" | "disabled";
+  animation?: "none" | "spin" | "pulse" | "bounce";
+  className?: string;
+}
+```
 
 ## Components and Interfaces
 
@@ -92,17 +199,27 @@ interface HeaderComponent {
 #### Portfolio Overview Components
 ```typescript
 interface PortfolioOverview {
-  totalValue: MetricCard;
-  totalReturn: MetricCard;
-  pieChart: ConsolidatedPieChart;
-  pieList: PieListComponent;
+  totalValue: AnimatedMetricCard;
+  totalReturn: AnimatedMetricCard;
+  pieChart: InteractiveConsolidatedPieChart;
+  pieList: AnimatedPieListComponent;
 }
 
-interface MetricCard {
+interface AnimatedMetricCard {
   title: string;
   value: number | string;
   change?: PercentageChange;
   trend?: TrendIndicator;
+  animationDelay?: number;
+  hoverEffect?: boolean;
+  gradient?: boolean;
+}
+
+interface InteractiveElement {
+  hoverScale?: number;
+  clickAnimation?: AnimationStyle;
+  backdropBlur?: boolean;
+  shadowEffect?: boolean;
 }
 ```
 
@@ -120,11 +237,26 @@ interface PieAnalysisView {
 #### Financial Visualization Components
 ```typescript
 interface ChartComponents {
-  performanceChart: TimeSeriesChart;
-  allocationPieChart: PieChart;
-  sectorBreakdownChart: DonutChart;
-  benchmarkComparisonChart: LineChart;
-  riskReturnScatterPlot: ScatterChart;
+  performanceChart: AnimatedTimeSeriesChart;
+  allocationPieChart: InteractivePieChart;
+  sectorBreakdownChart: AnimatedDonutChart;
+  benchmarkComparisonChart: InteractiveLineChart;
+  riskReturnScatterPlot: AnimatedScatterChart;
+}
+
+interface AnimatedChart extends InteractiveElement {
+  enterAnimation: AnimationStyle;
+  dataUpdateAnimation: AnimationStyle;
+  tooltipAnimation: AnimationStyle;
+  loadingState: SkeletonLoader;
+}
+
+interface ModernUIElements {
+  backdropBlur: boolean;
+  gradientBackgrounds: boolean;
+  shadowEffects: boolean;
+  hoverTransitions: boolean;
+  microInteractions: boolean;
 }
 ```
 
@@ -377,18 +509,28 @@ interface PerformanceOptimization {
     lazyLoading: 'React.lazy for route-based code splitting';
     memoization: 'React.memo for expensive components';
     virtualization: 'React Window for large lists';
+    animationOptimization: 'Framer Motion layout animations with will-change';
   };
   
   dataFetching: {
     caching: 'React Query with stale-while-revalidate';
     prefetching: 'Prefetch critical data on route change';
     pagination: 'Paginate large datasets';
+    optimisticUpdates: 'Immediate UI feedback with rollback';
   };
   
   bundleOptimization: {
     treeshaking: 'Remove unused code';
     compression: 'Gzip/Brotli compression';
     cdn: 'CDN for static assets';
+    motionOptimization: 'Tree-shake unused Framer Motion features';
+  };
+  
+  userExperience: {
+    skeletonLoaders: 'Animated loading states for all components';
+    errorBoundaries: 'Graceful error handling with recovery options';
+    accessibilityAnimations: 'Respect prefers-reduced-motion';
+    responsiveAnimations: 'Adaptive animations for different screen sizes';
   };
 }
 ```

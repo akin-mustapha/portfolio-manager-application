@@ -150,28 +150,69 @@
     - Validate component rendering and user interactions
     - _Requirements: 1.1, 2.1, 3.1_
 
-- [ ] 8. Build advanced visualization components
-  - [ ] 8.1 Create performance and risk visualization charts
-    - Implement time series charts for portfolio performance using Chart.js/Recharts
-    - Build risk-return scatter plots and volatility charts
-    - Add benchmark comparison line charts with multiple series
+- [x] 8. Build advanced visualization components with modern UI
+  - [ ] 8.1 Set up modern UI foundation and animation system
+    - Install and configure Framer Motion for animations
+    - Set up Tailwind CSS custom classes for glassmorphism and gradients
+    - Create reusable animation variants and utility functions
+    - Create utility functions for consistent hover states and transitions
+    - _Requirements: 1.1, 1.2_
+
+  - [ ] 8.2 Set up comprehensive icon system with Lucide React
+    - Install Lucide React for consistent iconography
+    - Create icon mapping for financial dashboard (TrendingUp, TrendingDown, DollarSign, PieChart, BarChart, Activity, AlertTriangle, CheckCircle, X, Menu, Settings, Refresh, Eye, EyeOff, etc.)
+    - Build IconWrapper component with consistent sizing and animation support
+    - Create icon variants for different states (default, hover, active, disabled)
+    - Add icon animation utilities (rotate, scale, fade) matching the snippet's style
+    - Set up icon accessibility with proper ARIA labels
+    - _Requirements: 1.1, 1.2_
+
+  - [ ] 8.3 Create animated metric cards and dashboard components
+    - Build AnimatedMetricCard with smooth number transitions and hover effects
+    - Implement gradient backgrounds and backdrop blur effects
+    - Add staggered entrance animations for dashboard grid layouts
+    - Create loading skeleton components with shimmer animations
+    - Add responsive scaling and micro-interactions
+    - _Requirements: 4.1, 3.1, 3.2_
+
+  - [ ] 8.4 Implement interactive performance and risk visualization charts
+    - Create AnimatedTimeSeriesChart with smooth data transitions using Chart.js/Recharts
+    - Build InteractiveLineChart for benchmark comparisons with hover tooltips
+    - Add AnimatedScatterChart for risk-return analysis with zoom and pan
+    - Implement chart loading states with skeleton animations
+    - Add chart interaction animations (hover, click, data updates)
     - _Requirements: 4.1, 5.1, 8.1, 8.5_
 
-  - [ ] 8.2 Implement allocation and diversification charts
-    - Create sector and geographical breakdown pie/donut charts
-    - Build allocation drift visualization and rebalancing indicators
-    - Add top holdings table with sortable columns
+  - [ ] 8.5 Build animated allocation and diversification visualizations
+    - Create InteractivePieChart with smooth segment transitions and hover effects
+    - Build AnimatedDonutChart for sector breakdowns with progressive loading
+    - Implement animated top holdings table with sortable columns and row animations
+    - Add allocation drift indicators with color-coded animations
+    - Create rebalancing suggestion cards with call-to-action animations
     - _Requirements: 6.1, 6.2, 6.3, 6.4, 12.1, 12.2_
 
-  - [ ] 8.3 Build pie-specific analysis views
-    - Create detailed pie performance dashboard with metrics cards
-    - Implement pie comparison charts and ranking tables
-    - Add pie-level allocation and holdings breakdown visualizations
+  - [ ] 8.6 Develop pie-specific analysis views with modern interactions
+    - Create detailed pie performance dashboard with animated metric cards
+    - Build pie comparison interface with smooth transitions between selections
+    - Implement pie ranking tables with animated sorting and filtering
+    - Add pie-level allocation breakdown with interactive drill-down animations
+    - Create pie performance timeline with scrubbing interactions
     - _Requirements: 9.1, 10.1, 11.1, 12.1_
 
-  - [ ] 8.4 Write visualization component tests
-    - Test chart rendering with mock data
-    - Validate interactive features and data updates
+  - [ ] 8.7 Add advanced UI interactions and modal systems
+    - Create animated modal system similar to HeroVideoDialog pattern
+    - Build expandable chart views with smooth full-screen transitions
+    - Implement contextual tooltips with backdrop blur and animations
+    - Add keyboard navigation with focus animations
+    - Create responsive breakpoint animations for mobile/tablet/desktop
+    - _Requirements: 1.1, 1.2_
+
+  - [ ] 8.8 Write comprehensive tests for animated components
+    - Test animation lifecycle and state management
+    - Validate accessibility features (prefers-reduced-motion support)
+    - Test responsive behavior and performance on different devices
+    - Validate chart rendering with mock data and interaction testing
+    - Test error states and loading animations
     - _Requirements: 4.1, 6.1, 9.1_
 
 - [ ] 9. Implement real-time data updates and caching
@@ -199,16 +240,20 @@
     - Create user-friendly error messages and recovery suggestions
     - _Requirements: 2.3, 3.4_
 
-  - [ ] 10.2 Add loading states and performance optimizations
-    - Implement skeleton loading screens for all major components
-    - Add React.memo and useMemo for expensive calculations
-    - Optimize bundle size with code splitting and lazy loading
+  - [ ] 10.2 Add modern loading states and performance optimizations
+    - Implement animated skeleton loading screens with shimmer effects for all major components
+    - Add React.memo and useMemo for expensive calculations and animations
+    - Optimize bundle size with code splitting and lazy loading of animation libraries
+    - Implement prefers-reduced-motion support for accessibility
+    - Add performance monitoring for animation frame rates
     - _Requirements: 1.3_
 
-  - [ ] 10.3 Implement responsive design and accessibility
-    - Ensure all components work across desktop, tablet, and mobile devices
-    - Add keyboard navigation and screen reader support
-    - Implement proper ARIA labels and semantic HTML
+  - [ ] 10.3 Implement responsive design and accessibility with modern interactions
+    - Ensure all animated components work across desktop, tablet, and mobile devices
+    - Add keyboard navigation with focus animations and screen reader support
+    - Implement proper ARIA labels and semantic HTML for interactive elements
+    - Add touch gesture support for mobile chart interactions
+    - Create adaptive animations that scale based on device capabilities
     - _Requirements: 1.1, 1.2_
 
 - [ ] 11. Set up deployment and production configuration

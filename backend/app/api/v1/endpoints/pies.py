@@ -3,10 +3,10 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query, Path
 from datetime import datetime
 from decimal import Decimal
 
-from app.core.deps import get_trading212_api_key, get_current_user_id
-from app.services.trading212_service import Trading212Service, Trading212APIError
-from app.models.pie import Pie, PieMetrics
-from app.models.position import Position
+from core.deps import get_trading212_api_key, get_current_user_id
+from services.trading212_service import Trading212Service, Trading212APIError
+from models.pie import Pie, PieMetrics
+from models.position import Position
 
 router = APIRouter()
 

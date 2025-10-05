@@ -6,7 +6,7 @@ from fastapi import HTTPException, status
 from cryptography.fernet import Fernet
 import secrets
 
-from app.core.config import settings
+from core.config import settings
 
 # Password hashing context
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")

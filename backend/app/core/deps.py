@@ -4,9 +4,9 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 import redis
 
-from app.core.security import verify_token
-from app.core.config import settings
-from app.db.session import SessionLocal
+from core.security import verify_token
+from core.config import settings
+from db.session import SessionLocal
 
 # Security scheme for JWT tokens
 security = HTTPBearer()

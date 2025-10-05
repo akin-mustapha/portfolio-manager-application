@@ -6,9 +6,9 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from ....core.deps import get_db, get_current_user_id
-from ....services.calculations_service import CalculationsService
-from ....services.trading212_service import Trading212Service
+from core.deps import get_db, get_current_user_id
+from services.calculations_service import CalculationsService
+from services.trading212_service import Trading212Service
 
 router = APIRouter()
 
