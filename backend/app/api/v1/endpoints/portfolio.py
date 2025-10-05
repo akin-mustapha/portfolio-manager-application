@@ -675,6 +675,92 @@ async def get_comprehensive_allocation_analysis(
         )
 
 
+@router.get("/rate-limit-status")
+async def get_rate_limit_status(
+    user_id: str = Depends(get_current_user_id),
+    api_key: str = Depends(get_trading212_api_key)
+) -> Any:
+    """
+    Get current Trading 212 API rate limit status for debugging
+    """
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Trading 212 API key not configured"
+        )
+    
+    try:
+        async with Trading212Service() as service:
+            # Just initialize the service and get rate limit status without authenticating
+            rate_limit_status = service.get_rate_limit_status()
+            return {
+                "rate_limit": rate_limit_status,
+                "message": "Rate limit status retrieved successfully",
+                "api_key_configured": bool(api_key)
+            }
+            
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        return {
+            "error": str(e),
+            "traceback": error_details,
+            "message": "Failed to get rate limit status"
+        }
+
+
+@router.get("/test-single-call")
+async def test_single_api_call(
+    user_id: str = Depends(get_current_user_id),
+    api_key: str = Depends(get_trading212_api_key)
+) -> Any:
+    """
+    Test a single Trading 212 API call to verify rate limiting works
+    """
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Trading 212 API key not configured"
+        )
+    
+    try:
+        async with Trading212Service() as service:
+            # Authenticate first
+            auth_result = await service.authenticate(api_key)
+            if not auth_result.success:
+                return {
+                    "success": False,
+                    "message": f"Authentication failed: {auth_result.message}",
+                    "rate_limit": service.get_rate_limit_status()
+                }
+            
+            # Make a single API call
+            account_info = await service.get_account_info()
+            
+            return {
+                "success": True,
+                "message": "Single API call successful",
+                "account_id": account_info.get("id"),
+                "currency": account_info.get("currencyCode"),
+                "rate_limit": service.get_rate_limit_status()
+            }
+            
+    except Trading212APIError as e:
+        return {
+            "success": False,
+            "error_type": e.error_type,
+            "message": e.message,
+            "status_code": e.status_code
+        }
+    except Exception as e:
+        import traceback
+        return {
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+
+
 @router.post("/allocation-drift")
 async def detect_allocation_drift(
     target_allocations: Dict[str, Dict[str, float]],

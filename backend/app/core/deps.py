@@ -6,7 +6,7 @@ import redis
 
 from app.core.security import verify_token
 from app.core.config import settings
-from db.session import SessionLocal
+from app.db.session import SessionLocal
 
 # Security scheme for JWT tokens
 security = HTTPBearer()

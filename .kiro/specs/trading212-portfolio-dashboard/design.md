@@ -606,3 +606,530 @@ sequenceDiagram
 - **Weekly Jobs:** Recalculate risk metrics and benchmarks
 - **Monthly Jobs:** Generate portfolio reports and analytics
 - **Real-time Updates:** Live price updates during market hours
+
+## Logging and Monitoring Design
+
+### Logging Architecture
+
+```mermaid
+graph TB
+    subgraph "Application Layer"
+        API[FastAPI Application]
+        Service[Trading212 Service]
+        Auth[Authentication Service]
+        Calc[Calculations Service]
+    end
+    
+    subgraph "Logging Layer"
+        Logger[Python Logger]
+        Formatter[Log Formatter]
+        Filter[Sensitive Data Filter]
+    end
+    
+    subgraph "Storage Layer"
+        Local[Local Log Files]
+        Central[Centralized Log Server]
+        Metrics[Metrics Collection]
+    end
+    
+    API --> Logger
+    Service --> Logger
+    Auth --> Logger
+    Calc --> Logger
+    Logger --> Formatter
+    Formatter --> Filter
+    Filter --> Local
+    Filter --> Central
+    Filter --> Metrics
+```
+
+### Logging Configuration
+
+```python
+import logging
+import json
+from datetime import datetime
+from typing import Optional, Dict, Any
+from fastapi import Request
+from contextlib import contextmanager
+
+class SecurityFilter(logging.Filter):
+    """Filter to remove sensitive data from logs"""
+    
+    SENSITIVE_KEYS = {
+        'password', 'api_key', 'token', 'secret', 'authorization',
+        'trading212_api_key', 'encrypted_key', 'refresh_token', 'access_token'
+    }
+    
+    def filter(self, record: logging.LogRecord) -> bool:
+        if hasattr(record, 'msg') and isinstance(record.msg, dict):
+            record.msg = self._sanitize_dict(record.msg)
+        elif hasattr(record, 'args') and record.args:
+            record.args = tuple(self._sanitize_value(arg) for arg in record.args)
+        return True
+    
+    def _sanitize_dict(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Remove sensitive keys from dictionary"""
+        sanitized = {}
+        for key, value in data.items():
+            if key.lower() in self.SENSITIVE_KEYS:
+                sanitized[key] = "[REDACTED]"
+            elif isinstance(value, dict):
+                sanitized[key] = self._sanitize_dict(value)
+            else:
+                sanitized[key] = self._sanitize_value(value)
+        return sanitized
+    
+    def _sanitize_value(self, value: Any) -> Any:
+        """Sanitize individual values"""
+        if isinstance(value, str) and len(value) > 20:
+            # Potentially sensitive string, mask middle part
+            return f"{value[:4]}...{value[-4:]}"
+        return value
+
+class ContextualFormatter(logging.Formatter):
+    """Custom formatter that includes request context"""
+    
+    def format(self, record: logging.LogRecord) -> str:
+        # Add timestamp
+        record.timestamp = datetime.utcnow().isoformat()
+        
+        # Add request context if available
+        if hasattr(record, 'request_id'):
+            record.request_context = {
+                'request_id': record.request_id,
+                'user_id': getattr(record, 'user_id', None),
+                'endpoint': getattr(record, 'endpoint', None),
+                'method': getattr(record, 'method', None)
+            }
+        
+        # Format as JSON for structured logging
+        log_data = {
+            'timestamp': record.timestamp,
+            'level': record.levelname,
+            'logger': record.name,
+            'message': record.getMessage(),
+            'module': record.module,
+            'function': record.funcName,
+            'line': record.lineno
+        }
+        
+        if hasattr(record, 'request_context'):
+            log_data['request_context'] = record.request_context
+        
+        if hasattr(record, 'extra_data'):
+            log_data['extra_data'] = record.extra_data
+        
+        return json.dumps(log_data, default=str)
+
+# Logging configuration
+LOGGING_CONFIG = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'contextual': {
+            '()': ContextualFormatter,
+        },
+        'simple': {
+            'format': '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        }
+    },
+    'filters': {
+        'security_filter': {
+            '()': SecurityFilter,
+        }
+    },
+    'handlers': {
+        'file': {
+            'level': 'INFO',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': 'logs/application.log',
+            'maxBytes': 10485760,  # 10MB
+            'backupCount': 5,
+            'formatter': 'contextual',
+            'filters': ['security_filter']
+        },
+        'console': {
+            'level': 'DEBUG',
+            'class': 'logging.StreamHandler',
+            'formatter': 'simple',
+            'filters': ['security_filter']
+        },
+        'centralized': {
+            'level': 'WARNING',
+            'class': 'logging.handlers.HTTPHandler',
+            'host': 'logs.example.com',
+            'url': '/api/logs',
+            'method': 'POST',
+            'formatter': 'contextual',
+            'filters': ['security_filter']
+        }
+    },
+    'loggers': {
+        'app': {
+            'handlers': ['file', 'console', 'centralized'],
+            'level': 'DEBUG',
+            'propagate': False
+        },
+        'trading212_service': {
+            'handlers': ['file', 'console', 'centralized'],
+            'level': 'INFO',
+            'propagate': False
+        },
+        'auth_service': {
+            'handlers': ['file', 'console', 'centralized'],
+            'level': 'INFO',
+            'propagate': False
+        }
+    }
+}
+```
+
+### Request Context Middleware
+
+```python
+import uuid
+from fastapi import Request, Response
+from starlette.middleware.base import BaseHTTPMiddleware
+from contextvars import ContextVar
+
+# Context variables for request tracking
+request_id_var: ContextVar[str] = ContextVar('request_id')
+user_id_var: ContextVar[Optional[str]] = ContextVar('user_id', default=None)
+
+class LoggingMiddleware(BaseHTTPMiddleware):
+    """Middleware to add request context to logs"""
+    
+    async def dispatch(self, request: Request, call_next):
+        # Generate unique request ID
+        request_id = str(uuid.uuid4())
+        request_id_var.set(request_id)
+        
+        # Extract user ID from JWT token if available
+        user_id = self._extract_user_id(request)
+        if user_id:
+            user_id_var.set(user_id)
+        
+        # Log request start
+        logger = logging.getLogger('app.requests')
+        logger.info(
+            "Request started",
+            extra={
+                'request_id': request_id,
+                'user_id': user_id,
+                'endpoint': str(request.url.path),
+                'method': request.method,
+                'user_agent': request.headers.get('user-agent'),
+                'ip_address': request.client.host if request.client else None
+            }
+        )
+        
+        start_time = time.time()
+        
+        try:
+            response = await call_next(request)
+            
+            # Log successful request
+            duration = time.time() - start_time
+            logger.info(
+                "Request completed",
+                extra={
+                    'request_id': request_id,
+                    'user_id': user_id,
+                    'endpoint': str(request.url.path),
+                    'method': request.method,
+                    'status_code': response.status_code,
+                    'duration_ms': round(duration * 1000, 2)
+                }
+            )
+            
+            return response
+            
+        except Exception as e:
+            # Log request error
+            duration = time.time() - start_time
+            logger.error(
+                "Request failed",
+                extra={
+                    'request_id': request_id,
+                    'user_id': user_id,
+                    'endpoint': str(request.url.path),
+                    'method': request.method,
+                    'error': str(e),
+                    'duration_ms': round(duration * 1000, 2)
+                },
+                exc_info=True
+            )
+            raise
+    
+    def _extract_user_id(self, request: Request) -> Optional[str]:
+        """Extract user ID from JWT token"""
+        try:
+            auth_header = request.headers.get('authorization')
+            if auth_header and auth_header.startswith('Bearer '):
+                token = auth_header.split(' ')[1]
+                # Decode JWT token to get user ID
+                # Implementation depends on your JWT library
+                return self._decode_jwt_user_id(token)
+        except Exception:
+            pass
+        return None
+
+# Context-aware logger helper
+class ContextLogger:
+    """Logger that automatically includes request context"""
+    
+    def __init__(self, name: str):
+        self.logger = logging.getLogger(name)
+    
+    def _get_extra_context(self, extra: Optional[Dict] = None) -> Dict:
+        """Get current request context"""
+        context = {}
+        
+        try:
+            context['request_id'] = request_id_var.get()
+        except LookupError:
+            pass
+        
+        try:
+            context['user_id'] = user_id_var.get()
+        except LookupError:
+            pass
+        
+        if extra:
+            context.update(extra)
+        
+        return context
+    
+    def info(self, message: str, extra: Optional[Dict] = None):
+        self.logger.info(message, extra=self._get_extra_context(extra))
+    
+    def warning(self, message: str, extra: Optional[Dict] = None):
+        self.logger.warning(message, extra=self._get_extra_context(extra))
+    
+    def error(self, message: str, extra: Optional[Dict] = None, exc_info: bool = False):
+        self.logger.error(message, extra=self._get_extra_context(extra), exc_info=exc_info)
+    
+    def debug(self, message: str, extra: Optional[Dict] = None):
+        self.logger.debug(message, extra=self._get_extra_context(extra))
+```
+
+### Service-Specific Logging
+
+```python
+# Trading 212 Service Logging
+class Trading212Service:
+    def __init__(self):
+        self.logger = ContextLogger('trading212_service')
+    
+    async def authenticate(self, api_key: str) -> AuthResult:
+        self.logger.info("Trading 212 authentication attempt started")
+        
+        try:
+            # Authentication logic here
+            result = await self._make_auth_request(api_key)
+            
+            if result.success:
+                self.logger.info(
+                    "Trading 212 authentication successful",
+                    extra={'account_id': result.account_id}
+                )
+            else:
+                self.logger.warning(
+                    "Trading 212 authentication failed",
+                    extra={'reason': result.message}
+                )
+            
+            return result
+            
+        except Exception as e:
+            self.logger.error(
+                "Trading 212 authentication error",
+                extra={'error_type': type(e).__name__},
+                exc_info=True
+            )
+            raise
+    
+    async def _make_request(self, method: str, endpoint: str, **kwargs):
+        self.logger.debug(
+            "Trading 212 API request",
+            extra={
+                'method': method,
+                'endpoint': endpoint,
+                'rate_limit_remaining': self._requests_remaining
+            }
+        )
+        
+        try:
+            response = await self._execute_request(method, endpoint, **kwargs)
+            
+            self.logger.info(
+                "Trading 212 API request successful",
+                extra={
+                    'method': method,
+                    'endpoint': endpoint,
+                    'status_code': response.status_code,
+                    'rate_limit_remaining': self._requests_remaining
+                }
+            )
+            
+            return response
+            
+        except Trading212APIError as e:
+            if e.error_type == "rate_limit_exceeded":
+                self.logger.warning(
+                    "Trading 212 rate limit exceeded",
+                    extra={
+                        'endpoint': endpoint,
+                        'reset_time': self._rate_limit_reset,
+                        'requests_remaining': self._requests_remaining
+                    }
+                )
+            else:
+                self.logger.error(
+                    "Trading 212 API error",
+                    extra={
+                        'endpoint': endpoint,
+                        'error_type': e.error_type,
+                        'status_code': e.status_code
+                    }
+                )
+            raise
+
+# Authentication Service Logging
+class AuthService:
+    def __init__(self):
+        self.logger = ContextLogger('auth_service')
+    
+    async def create_session(self, session_data: SessionCreate):
+        self.logger.info(
+            "Session creation started",
+            extra={'session_name': session_data.session_name}
+        )
+        
+        try:
+            session = await self._create_session_logic(session_data)
+            
+            self.logger.info(
+                "Session created successfully",
+                extra={
+                    'session_id': session.session_id,
+                    'expires_in': session.expires_in
+                }
+            )
+            
+            return session
+            
+        except Exception as e:
+            self.logger.error(
+                "Session creation failed",
+                extra={'error_type': type(e).__name__},
+                exc_info=True
+            )
+            raise
+```
+
+### Monitoring and Alerting
+
+```python
+from typing import Dict, Any
+import time
+from dataclasses import dataclass
+
+@dataclass
+class MetricEvent:
+    name: str
+    value: float
+    tags: Dict[str, str]
+    timestamp: float = None
+    
+    def __post_init__(self):
+        if self.timestamp is None:
+            self.timestamp = time.time()
+
+class MetricsCollector:
+    """Collect application metrics for monitoring"""
+    
+    def __init__(self):
+        self.logger = ContextLogger('metrics')
+    
+    def record_api_call(self, endpoint: str, method: str, status_code: int, duration_ms: float):
+        """Record API call metrics"""
+        self.logger.info(
+            "API call metric",
+            extra={
+                'metric_type': 'api_call',
+                'endpoint': endpoint,
+                'method': method,
+                'status_code': status_code,
+                'duration_ms': duration_ms
+            }
+        )
+    
+    def record_trading212_rate_limit(self, remaining: int, reset_time: datetime):
+        """Record Trading 212 rate limit status"""
+        self.logger.info(
+            "Trading 212 rate limit status",
+            extra={
+                'metric_type': 'rate_limit',
+                'requests_remaining': remaining,
+                'reset_time': reset_time.isoformat()
+            }
+        )
+    
+    def record_error(self, error_type: str, endpoint: str = None):
+        """Record error occurrence"""
+        self.logger.warning(
+            "Error metric",
+            extra={
+                'metric_type': 'error',
+                'error_type': error_type,
+                'endpoint': endpoint
+            }
+        )
+    
+    def record_user_action(self, action: str, user_id: str):
+        """Record user action for analytics"""
+        self.logger.info(
+            "User action metric",
+            extra={
+                'metric_type': 'user_action',
+                'action': action,
+                'user_id': user_id
+            }
+        )
+
+# Global metrics collector instance
+metrics = MetricsCollector()
+```
+
+### Log Analysis and Alerting Rules
+
+```yaml
+# Example alerting rules for log monitoring
+alerting_rules:
+  - name: "High Error Rate"
+    condition: "error_rate > 5% over 5 minutes"
+    severity: "warning"
+    notification: "slack"
+    
+  - name: "Trading 212 API Failures"
+    condition: "trading212_api_errors > 10 over 10 minutes"
+    severity: "critical"
+    notification: "email, slack"
+    
+  - name: "Authentication Failures"
+    condition: "auth_failures > 20 over 5 minutes"
+    severity: "warning"
+    notification: "slack"
+    
+  - name: "Rate Limit Exceeded"
+    condition: "rate_limit_exceeded > 0"
+    severity: "info"
+    notification: "slack"
+
+log_retention:
+  local_files: "30 days"
+  centralized_logs: "90 days"
+  metrics: "1 year"
+```

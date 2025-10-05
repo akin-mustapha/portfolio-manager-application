@@ -292,3 +292,53 @@
     - Add user onboarding flow and help documentation
     - Create API documentation with FastAPI's automatic docs
     - _Requirements: 1.1, 2.1_
+
+- [x] 13. Implement comprehensive logging and monitoring system
+  - [x] 13.1 Set up structured logging infrastructure
+    - Create SecurityFilter class to remove sensitive data from logs (API keys, tokens, passwords)
+    - Implement ContextualFormatter for JSON-structured logs with timestamps and request context
+    - Configure rotating file handlers with size limits and backup retention
+    - Set up centralized logging with HTTP handler for remote log aggregation
+    - _Requirements: 13.1, 13.2, 13.3, 13.4_
+
+  - [x] 13.2 Implement request context middleware and tracking
+    - Create LoggingMiddleware to add unique request IDs and user context to all requests
+    - Implement context variables for request tracking across async operations
+    - Add request/response logging with duration, status codes, and user identification
+    - Create ContextLogger class for automatic request context inclusion in service logs
+    - _Requirements: 13.1, 13.2, 13.5_
+
+  - [x] 13.3 Add service-specific logging for Trading 212 integration
+    - Implement comprehensive logging in Trading212Service for authentication events
+    - Add API request/response logging with rate limit tracking and error categorization
+    - Log rate limit status, reset times, and retry attempts for monitoring
+    - Create structured logs for API failures with error types and recovery actions
+    - _Requirements: 13.5, 13.6, 13.7_
+
+  - [x] 13.4 Implement authentication and security event logging
+    - Add logging for all authentication attempts (success/failure) with user context
+    - Log API key setup, validation, and rotation events without exposing sensitive data
+    - Implement session management logging (creation, refresh, expiration, deletion)
+    - Add security event logging for suspicious activities and rate limiting violations
+    - _Requirements: 13.5, 13.4, 13.8_
+
+  - [x] 13.5 Create metrics collection and monitoring system
+    - Implement MetricsCollector class for application performance metrics
+    - Add API endpoint performance tracking (response times, error rates, throughput)
+    - Create Trading 212 API health monitoring with rate limit and error tracking
+    - Implement user action analytics and system health metrics collection
+    - _Requirements: 13.6, 13.7, 13.8_
+
+  - [x] 13.6 Set up log analysis and alerting infrastructure
+    - Configure log retention policies for local files and centralized storage
+    - Implement alerting rules for high error rates, API failures, and security events
+    - Set up automated log analysis for pattern detection and anomaly identification
+    - Create monitoring dashboards for system health and performance metrics
+    - _Requirements: 13.1, 13.2, 13.3_
+
+  - [x] 13.7 Write comprehensive tests for logging system
+    - Test SecurityFilter to ensure sensitive data is properly redacted from logs
+    - Validate ContextualFormatter JSON output and request context inclusion
+    - Test LoggingMiddleware request tracking and context propagation
+    - Verify service-specific logging captures all required events and metadata
+    - _Requirements: 13.1, 13.4, 13.5_

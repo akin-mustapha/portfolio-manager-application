@@ -17,16 +17,18 @@ import redis.asyncio as redis
 from cryptography.fernet import Fernet
 from pydantic import BaseModel, ValidationError
 
-from core.config import settings
-from models.portfolio import Portfolio, PortfolioMetrics
-from models.pie import Pie, PieMetrics
-from models.position import Position
-from models.dividend import Dividend
-from models.historical import HistoricalData
-from models.enums import AssetType
+from app.core.config import settings
+from app.core.logging import get_context_logger
+from app.core.metrics import get_metrics_collector
+from app.models.portfolio import Portfolio, PortfolioMetrics
+from app.models.pie import Pie, PieMetrics
+from app.models.position import Position
+from app.models.dividend import Dividend
+from app.models.historical import HistoricalData
+from app.models.enums import AssetType
 
 
-logger = logging.getLogger(__name__)
+logger = get_context_logger(__name__)
 
 
 class AuthResult(BaseModel):
@@ -57,25 +59,54 @@ class Trading212Service:
     DEMO_BASE_URL = "https://demo.trading212.com/api/v0"
     
     def __init__(self, use_demo: bool = False):
+        logger.info(
+            "Initializing Trading212Service",
+            extra={
+                'use_demo': use_demo,
+                'base_url': self.DEMO_BASE_URL if use_demo else self.BASE_URL
+            }
+        )
+        
         self.base_url = self.DEMO_BASE_URL if use_demo else self.BASE_URL
         self.session: Optional[httpx.AsyncClient] = None
         self.api_key: Optional[str] = None
         self.redis_client: Optional[redis.Redis] = None
         self.cipher_suite: Optional[Fernet] = None
-        self._rate_limit_reset: Optional[datetime] = None
+        self.metrics = get_metrics_collector()
+        
+        # Rate limiting properties
+        self._rate_limit_limit: int = 60  # Default rate limit
         self._requests_remaining: int = 60  # Default rate limit
+        self._rate_limit_reset: Optional[datetime] = None
+        self._request_queue: asyncio.Queue = asyncio.Queue()
+        self._queue_processor_task: Optional[asyncio.Task] = None
+        self._request_lock = asyncio.Lock()
         
         # Initialize encryption for API key storage
         self._init_encryption()
+        
+        logger.info(
+            "Trading212Service initialized successfully",
+            extra={
+                'rate_limit_initial': self._rate_limit_limit,
+                'encryption_enabled': self.cipher_suite is not None
+            }
+        )
     
     def _init_encryption(self):
         """Initialize encryption for secure API key storage."""
         try:
+            logger.debug("Initializing encryption for API key storage")
             # Use a key derived from the secret key for encryption
             key = Fernet.generate_key()  # In production, derive from settings.SECRET_KEY
             self.cipher_suite = Fernet(key)
+            logger.info("Encryption initialized successfully")
         except Exception as e:
-            logger.error(f"Failed to initialize encryption: {e}")
+            logger.error(
+                "Failed to initialize encryption",
+                extra={'error_type': type(e).__name__},
+                exc_info=True
+            )
             raise Trading212APIError("Failed to initialize secure storage")
     
     async def __aenter__(self):
@@ -89,27 +120,57 @@ class Trading212Service:
     
     async def _init_session(self):
         """Initialize HTTP session and Redis connection."""
-        # Initialize HTTP client
-        self.session = httpx.AsyncClient(
-            timeout=httpx.Timeout(30.0),
-            headers={
-                "User-Agent": "Trading212-Portfolio-Dashboard/1.0",
-                "Accept": "application/json",
-                "Content-Type": "application/json"
-            }
-        )
+        logger.info("Initializing Trading212Service session")
         
-        # Initialize Redis connection
         try:
-            self.redis_client = redis.from_url(settings.REDIS_URL)
-            await self.redis_client.ping()
-            logger.info("Redis connection established")
+            # Initialize HTTP client
+            self.session = httpx.AsyncClient(
+                timeout=httpx.Timeout(30.0),
+                headers={
+                    "User-Agent": "Trading212-Portfolio-Dashboard/1.0",
+                    "Accept": "application/json",
+                    "Content-Type": "application/json"
+                }
+            )
+            logger.info("HTTP client initialized successfully")
+            
+            # Initialize Redis connection
+            try:
+                self.redis_client = redis.from_url(settings.REDIS_URL)
+                await self.redis_client.ping()
+                logger.info(
+                    "Redis connection established",
+                    extra={'redis_url': settings.REDIS_URL.split('@')[-1]}  # Log without credentials
+                )
+                
+                # Load cached rate limit info
+                await self._load_rate_limit_cache()
+            except Exception as e:
+                logger.warning(
+                    "Redis connection failed, caching disabled",
+                    extra={'error_type': type(e).__name__, 'error_message': str(e)}
+                )
+                # Don't fail if Redis is not available, just disable caching
+                self.redis_client = None
+                
         except Exception as e:
-            logger.warning(f"Redis connection failed: {e}")
-            self.redis_client = None
+            logger.error(
+                "Failed to initialize session",
+                extra={'error_type': type(e).__name__},
+                exc_info=True
+            )
+            raise
     
     async def _close_session(self):
         """Close HTTP session and Redis connection."""
+        # Cancel queue processor if running
+        if self._queue_processor_task and not self._queue_processor_task.done():
+            self._queue_processor_task.cancel()
+            try:
+                await self._queue_processor_task
+            except asyncio.CancelledError:
+                pass
+        
         if self.session:
             await self.session.aclose()
         if self.redis_client:
@@ -127,13 +188,191 @@ class Trading212Service:
             raise Trading212APIError("Encryption not initialized")
         return self.cipher_suite.decrypt(encrypted_key.encode()).decode()
     
+    async def _load_rate_limit_cache(self):
+        """Load cached rate limit information from Redis."""
+        if not self.redis_client:
+            logger.debug("Skipping rate limit cache load - Redis not available")
+            return
+        
+        try:
+            logger.debug("Loading rate limit cache from Redis")
+            cache_data = await self.redis_client.hgetall("trading212:rate_limit")
+            if cache_data:
+                self._rate_limit_limit = int(cache_data.get("limit", 60))
+                self._requests_remaining = int(cache_data.get("remaining", self._rate_limit_limit))
+                
+                reset_timestamp = cache_data.get("reset")
+                if reset_timestamp:
+                    self._rate_limit_reset = datetime.fromtimestamp(float(reset_timestamp))
+                    
+                    # Check if reset time has passed
+                    if datetime.utcnow() >= self._rate_limit_reset:
+                        self._requests_remaining = self._rate_limit_limit
+                        self._rate_limit_reset = None
+                        logger.info("Rate limit cache expired, reset to default values")
+                        
+                logger.info(
+                    "Rate limit cache loaded successfully",
+                    extra={
+                        'limit': self._rate_limit_limit,
+                        'remaining': self._requests_remaining,
+                        'reset_time': self._rate_limit_reset.isoformat() if self._rate_limit_reset else None
+                    }
+                )
+            else:
+                logger.debug("No rate limit cache found, using defaults")
+        except Exception as e:
+            logger.warning(
+                "Failed to load rate limit cache",
+                extra={'error_type': type(e).__name__, 'error_message': str(e)}
+            )
+    
+    async def _save_rate_limit_cache(self):
+        """Save current rate limit information to Redis."""
+        if not self.redis_client:
+            return
+        
+        try:
+            cache_data = {
+                "limit": str(self._rate_limit_limit),
+                "remaining": str(self._requests_remaining)
+            }
+            
+            if self._rate_limit_reset:
+                cache_data["reset"] = str(self._rate_limit_reset.timestamp())
+            
+            # Use fire-and-forget approach to avoid blocking
+            asyncio.create_task(self._save_cache_async(cache_data))
+                    
+        except Exception as e:
+            logger.warning(f"Failed to save rate limit cache: {e}")
+    
+    async def _save_cache_async(self, cache_data: dict):
+        """Async helper to save cache data without blocking."""
+        try:
+            await self.redis_client.hset("trading212:rate_limit", mapping=cache_data)
+            
+            # Set expiration to reset time + 1 hour buffer
+            if self._rate_limit_reset:
+                expire_time = int((self._rate_limit_reset - datetime.utcnow()).total_seconds()) + 3600
+                if expire_time > 0:
+                    await self.redis_client.expire("trading212:rate_limit", expire_time)
+        except Exception as e:
+            logger.warning(f"Failed to save cache async: {e}")
+    
+    async def _update_rate_limit_from_headers(self, headers: dict):
+        """Update rate limit information from response headers."""
+        try:
+            # Check for rate limit headers (case-insensitive)
+            headers_lower = {k.lower(): v for k, v in headers.items()}
+            
+            rate_limit_updated = False
+            
+            if "x-ratelimit-limit" in headers_lower:
+                old_limit = self._rate_limit_limit
+                self._rate_limit_limit = int(headers_lower["x-ratelimit-limit"])
+                if old_limit != self._rate_limit_limit:
+                    logger.info(
+                        "Rate limit updated",
+                        extra={'old_limit': old_limit, 'new_limit': self._rate_limit_limit}
+                    )
+                rate_limit_updated = True
+            
+            if "x-ratelimit-remaining" in headers_lower:
+                old_remaining = self._requests_remaining
+                self._requests_remaining = int(headers_lower["x-ratelimit-remaining"])
+                if old_remaining != self._requests_remaining:
+                    logger.debug(
+                        "Remaining requests updated",
+                        extra={'old_remaining': old_remaining, 'new_remaining': self._requests_remaining}
+                    )
+                rate_limit_updated = True
+            
+            if "x-ratelimit-reset" in headers_lower:
+                reset_timestamp = int(headers_lower["x-ratelimit-reset"])
+                old_reset = self._rate_limit_reset
+                self._rate_limit_reset = datetime.fromtimestamp(reset_timestamp)
+                if old_reset != self._rate_limit_reset:
+                    logger.info(
+                        "Rate limit reset time updated",
+                        extra={'reset_time': self._rate_limit_reset.isoformat()}
+                    )
+                rate_limit_updated = True
+            
+            if rate_limit_updated:
+                # Save to cache
+                await self._save_rate_limit_cache()
+                
+                logger.debug(
+                    "Current rate limit status",
+                    extra={
+                        'remaining': self._requests_remaining,
+                        'limit': self._rate_limit_limit,
+                        'reset_time': self._rate_limit_reset.isoformat() if self._rate_limit_reset else None,
+                        'seconds_until_reset': (self._rate_limit_reset - datetime.utcnow()).total_seconds() if self._rate_limit_reset else None
+                    }
+                )
+            
+        except Exception as e:
+            logger.warning(
+                "Failed to update rate limit from headers",
+                extra={'error_type': type(e).__name__, 'error_message': str(e)},
+                exc_info=True
+            )
+    
+    async def _wait_for_rate_limit_reset(self):
+        """Wait until rate limit resets."""
+        if not self._rate_limit_reset:
+            logger.debug("No rate limit reset time set, skipping wait")
+            return
+        
+        now = datetime.utcnow()
+        if now >= self._rate_limit_reset:
+            # Reset has already passed
+            self._requests_remaining = self._rate_limit_limit
+            self._rate_limit_reset = None
+            await self._save_rate_limit_cache()
+            logger.info("Rate limit reset time has passed, resetting counters")
+            return
+        
+        wait_time = (self._rate_limit_reset - now).total_seconds()
+        logger.warning(
+            "Rate limit exceeded, waiting for reset",
+            extra={
+                'wait_time_seconds': round(wait_time, 1),
+                'reset_time': self._rate_limit_reset.isoformat(),
+                'current_remaining': self._requests_remaining
+            }
+        )
+        
+        await asyncio.sleep(wait_time)
+        
+        # Reset the counters
+        self._requests_remaining = self._rate_limit_limit
+        self._rate_limit_reset = None
+        await self._save_rate_limit_cache()
+        
+        logger.info(
+            "Rate limit reset completed",
+            extra={'new_remaining': self._requests_remaining, 'limit': self._rate_limit_limit}
+        )
+    
     async def _check_rate_limit(self):
-        """Check and handle rate limiting."""
-        if self._rate_limit_reset and datetime.utcnow() < self._rate_limit_reset:
-            if self._requests_remaining <= 0:
-                wait_time = (self._rate_limit_reset - datetime.utcnow()).total_seconds()
-                logger.warning(f"Rate limit exceeded. Waiting {wait_time} seconds")
-                await asyncio.sleep(wait_time)
+        """Check and handle rate limiting before making a request."""
+        # Check if reset time has passed
+        now = datetime.utcnow()
+        if self._rate_limit_reset and now >= self._rate_limit_reset:
+            self._requests_remaining = self._rate_limit_limit
+            self._rate_limit_reset = None
+            logger.info("Rate limit automatically reset")
+        
+        # If no requests remaining, wait for reset
+        if self._requests_remaining <= 0:
+            await self._wait_for_rate_limit_reset()
+        
+        # Decrement available requests
+        self._requests_remaining -= 1
+        logger.debug(f"Rate limit check: {self._requests_remaining} requests remaining")
     
     async def _make_request(
         self, 
@@ -161,30 +400,70 @@ class Trading212Service:
         Raises:
             Trading212APIError: On API errors or authentication failures
         """
+        logger.debug(
+            "Making Trading 212 API request",
+            extra={
+                'method': method,
+                'endpoint': endpoint,
+                'has_params': params is not None,
+                'has_data': data is not None,
+                'use_cache': use_cache,
+                'cache_ttl': cache_ttl
+            }
+        )
+        
         if not self.session:
+            logger.error("Session not initialized for API request")
             raise Trading212APIError("Session not initialized")
         
         if not self.api_key:
+            logger.error("API key not set for request")
             raise Trading212APIError("API key not set", error_type="authentication_failure")
         
-        # Check rate limiting
-        await self._check_rate_limit()
-        
-        # Check cache for GET requests
+        # Check cache for GET requests first (before rate limiting)
         cache_key = None
         if use_cache and method.upper() == "GET" and self.redis_client:
             cache_key = f"trading212:{endpoint}:{hash(str(params))}"
             try:
                 cached_data = await self.redis_client.get(cache_key)
                 if cached_data:
-                    logger.debug(f"Cache hit for {endpoint}")
+                    logger.debug(
+                        "Cache hit for Trading 212 API request",
+                        extra={'endpoint': endpoint, 'cache_key': cache_key}
+                    )
                     return json.loads(cached_data)
+                else:
+                    logger.debug(
+                        "Cache miss for Trading 212 API request",
+                        extra={'endpoint': endpoint, 'cache_key': cache_key}
+                    )
             except Exception as e:
-                logger.warning(f"Cache read error: {e}")
+                logger.warning(
+                    "Cache read error",
+                    extra={
+                        'endpoint': endpoint,
+                        'error_type': type(e).__name__,
+                        'error_message': str(e)
+                    }
+                )
+
+        # Check rate limiting before making request
+        await self._check_rate_limit()
         
         # Prepare request
         url = f"{self.base_url}{endpoint}"
         headers = {"Authorization": self.api_key}
+        
+        logger.debug(
+            "Sending HTTP request to Trading 212",
+            extra={
+                'url': url,
+                'method': method,
+                'rate_limit_remaining': self._requests_remaining
+            }
+        )
+        
+        request_start_time = datetime.utcnow()
         
         try:
             response = await self.session.request(
@@ -194,17 +473,44 @@ class Trading212Service:
                 params=params,
                 json=data
             )
+
+            request_duration = (datetime.utcnow() - request_start_time).total_seconds()
             
-            # Update rate limit info from headers
-            if "X-RateLimit-Remaining" in response.headers:
-                self._requests_remaining = int(response.headers["X-RateLimit-Remaining"])
-            if "X-RateLimit-Reset" in response.headers:
-                reset_timestamp = int(response.headers["X-RateLimit-Reset"])
-                self._rate_limit_reset = datetime.fromtimestamp(reset_timestamp)
+            logger.info(
+                "Trading 212 API request completed",
+                extra={
+                    'method': method,
+                    'endpoint': endpoint,
+                    'status_code': response.status_code,
+                    'duration_seconds': round(request_duration, 3),
+                    'response_size': len(response.content) if response.content else 0
+                }
+            )
+
+            # Update rate limit info from response headers
+            await self._update_rate_limit_from_headers(response.headers)
             
             # Handle different response status codes
             if response.status_code == 200:
                 response_data = response.json()
+                
+                logger.debug(
+                    "Trading 212 API request successful",
+                    extra={
+                        'endpoint': endpoint,
+                        'response_keys': list(response_data.keys()) if isinstance(response_data, dict) else 'non_dict_response',
+                        'data_size': len(str(response_data))
+                    }
+                )
+                
+                # Record successful request metrics
+                await self.metrics.record_trading212_request(
+                    endpoint=endpoint,
+                    success=True,
+                    response_time=request_duration,
+                    rate_limit_remaining=self._requests_remaining,
+                    rate_limit_reset=self._rate_limit_reset
+                )
                 
                 # Cache successful GET responses
                 if use_cache and method.upper() == "GET" and self.redis_client and cache_key:
@@ -214,24 +520,82 @@ class Trading212Service:
                             cache_ttl, 
                             json.dumps(response_data, default=str)
                         )
+                        logger.debug(
+                            "Cached Trading 212 API response",
+                            extra={'cache_key': cache_key, 'ttl_seconds': cache_ttl}
+                        )
                     except Exception as e:
-                        logger.warning(f"Cache write error: {e}")
+                        logger.warning(
+                            "Cache write error",
+                            extra={
+                                'endpoint': endpoint,
+                                'error_type': type(e).__name__,
+                                'error_message': str(e)
+                            }
+                        )
                 
                 return response_data
                 
             elif response.status_code == 401:
+                logger.error(
+                    "Trading 212 authentication failed",
+                    extra={
+                        'endpoint': endpoint,
+                        'status_code': response.status_code,
+                        'error_type': 'authentication_failure'
+                    }
+                )
+                
+                # Record authentication failure metrics
+                await self.metrics.record_trading212_request(
+                    endpoint=endpoint,
+                    success=False,
+                    response_time=request_duration,
+                    auth_failure=True,
+                    rate_limit_remaining=self._requests_remaining,
+                    rate_limit_reset=self._rate_limit_reset
+                )
+                
                 raise Trading212APIError(
                     "Authentication failed. Please check your API key.",
                     status_code=401,
                     error_type="authentication_failure"
                 )
             elif response.status_code == 429:
+                logger.warning(
+                    "Trading 212 rate limit exceeded",
+                    extra={
+                        'endpoint': endpoint,
+                        'status_code': response.status_code,
+                        'rate_limit_remaining': self._requests_remaining,
+                        'rate_limit_reset': self._rate_limit_reset.isoformat() if self._rate_limit_reset else None
+                    }
+                )
+                
+                # Record rate limit metrics
+                await self.metrics.record_trading212_request(
+                    endpoint=endpoint,
+                    success=False,
+                    response_time=request_duration,
+                    rate_limited=True,
+                    rate_limit_remaining=self._requests_remaining,
+                    rate_limit_reset=self._rate_limit_reset
+                )
+                
                 raise Trading212APIError(
                     "Rate limit exceeded. Please try again later.",
                     status_code=429,
                     error_type="rate_limit_exceeded"
                 )
             elif response.status_code == 503:
+                logger.error(
+                    "Trading 212 API unavailable",
+                    extra={
+                        'endpoint': endpoint,
+                        'status_code': response.status_code,
+                        'error_type': 'api_unavailable'
+                    }
+                )
                 raise Trading212APIError(
                     "Trading 212 API is temporarily unavailable.",
                     status_code=503,
@@ -246,6 +610,16 @@ class Trading212Service:
                 except:
                     pass
                 
+                logger.error(
+                    "Trading 212 API error",
+                    extra={
+                        'endpoint': endpoint,
+                        'status_code': response.status_code,
+                        'error_message': error_msg,
+                        'error_type': 'api_error'
+                    }
+                )
+                
                 raise Trading212APIError(
                     error_msg,
                     status_code=response.status_code,
@@ -253,7 +627,18 @@ class Trading212Service:
                 )
                 
         except httpx.RequestError as e:
-            logger.error(f"Request error: {e}")
+            request_duration = (datetime.utcnow() - request_start_time).total_seconds()
+            logger.error(
+                "Trading 212 API network error",
+                extra={
+                    'endpoint': endpoint,
+                    'method': method,
+                    'error_type': type(e).__name__,
+                    'error_message': str(e),
+                    'duration_seconds': round(request_duration, 3)
+                },
+                exc_info=True
+            )
             raise Trading212APIError(
                 f"Network error: {str(e)}",
                 error_type="network_error"
@@ -269,12 +654,29 @@ class Trading212Service:
         Returns:
             AuthResult with success status and message
         """
+        logger.info(
+            "Trading 212 authentication attempt started",
+            extra={
+                'api_key_length': len(api_key) if api_key else 0,
+                'base_url': self.base_url
+            }
+        )
+        
         try:
             # Store the API key temporarily for testing
             self.api_key = api_key
             
             # Test authentication by fetching account info
-            await self._make_request("GET", "/equity/account/info", use_cache=False)
+            logger.debug("Making authentication test request to /equity/account/info")
+            account_info = await self._make_request("GET", "/equity/account/info", use_cache=False)
+            
+            logger.info(
+                "Authentication test request successful",
+                extra={
+                    'account_id': account_info.get('id', 'unknown'),
+                    'currency': account_info.get('currencyCode', 'unknown')
+                }
+            )
             
             # If successful, encrypt and store the API key
             encrypted_key = self._encrypt_api_key(api_key)
@@ -287,10 +689,23 @@ class Trading212Service:
                         86400,  # 24 hours
                         encrypted_key
                     )
+                    logger.info("API key cached in Redis with 24h expiration")
                 except Exception as e:
-                    logger.warning(f"Failed to cache API key: {e}")
+                    logger.warning(
+                        "Failed to cache API key in Redis",
+                        extra={'error_type': type(e).__name__, 'error_message': str(e)}
+                    )
+            else:
+                logger.warning("Redis not available, API key not cached")
             
-            logger.info("Trading 212 authentication successful")
+            logger.info(
+                "Trading 212 authentication successful",
+                extra={
+                    'expires_at': (datetime.utcnow() + timedelta(hours=24)).isoformat(),
+                    'cached': self.redis_client is not None
+                }
+            )
+            
             return AuthResult(
                 success=True,
                 message="Authentication successful",
@@ -298,18 +713,29 @@ class Trading212Service:
             )
             
         except Trading212APIError as e:
-            logger.error(f"Authentication failed: {e.message}")
+            logger.error(
+                "Trading 212 authentication failed",
+                extra={
+                    'error_type': e.error_type,
+                    'status_code': e.status_code,
+                    'error_message': e.message
+                }
+            )
             self.api_key = None
             return AuthResult(
                 success=False,
                 message=e.message
             )
         except Exception as e:
-            logger.error(f"Unexpected authentication error: {e}")
+            logger.error(
+                "Unexpected authentication error",
+                extra={'error_type': type(e).__name__},
+                exc_info=True
+            )
             self.api_key = None
             return AuthResult(
                 success=False,
-                message="Unexpected authentication error"
+                message=f"Unexpected authentication error: {str(e)}"
             )
     
     async def load_stored_credentials(self) -> bool:
@@ -332,6 +758,15 @@ class Trading212Service:
             logger.error(f"Failed to load stored credentials: {e}")
         
         return False
+    
+    def get_rate_limit_status(self) -> Dict[str, Any]:
+        """Get current rate limit status for debugging."""
+        return {
+            "limit": self._rate_limit_limit,
+            "remaining": self._requests_remaining,
+            "reset_time": self._rate_limit_reset.isoformat() if self._rate_limit_reset else None,
+            "seconds_until_reset": (self._rate_limit_reset - datetime.utcnow()).total_seconds() if self._rate_limit_reset else None
+        }
     
     async def clear_credentials(self):
         """Clear stored API credentials."""
@@ -519,19 +954,20 @@ class Trading212Service:
             Complete Portfolio model with all pies and positions
         """
         try:
-            # Fetch all required data concurrently
-            account_info, pies_data, positions_data, cash_data = await asyncio.gather(
-                self.get_account_info(),
-                self.get_pies(),
-                self.get_positions(),
-                self.get_cash_balance(),
-                return_exceptions=True
-            )
+            # Fetch all required data sequentially to respect rate limits
+            logger.info("Fetching portfolio data sequentially to respect rate limits")
             
-            # Handle any exceptions from concurrent requests
-            for result in [account_info, pies_data, positions_data, cash_data]:
-                if isinstance(result, Exception):
-                    raise result
+            account_info = await self.get_account_info()
+            logger.debug("Fetched account info")
+            
+            pies_data = await self.get_pies()
+            logger.debug("Fetched pies data")
+            
+            positions_data = await self.get_positions()
+            logger.debug("Fetched positions data")
+            
+            cash_data = await self.get_cash_balance()
+            logger.debug("Fetched cash balance")
             
             # Transform positions data
             all_positions = []

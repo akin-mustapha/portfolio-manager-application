@@ -34,6 +34,24 @@ class Settings(BaseSettings):
     ALPHA_VANTAGE_API_KEY: Optional[str] = None
     YAHOO_FINANCE_ENABLED: bool = True
     
+    # Logging Configuration
+    LOG_LEVEL: str = "INFO"
+    LOG_DIR: str = "logs"
+    LOG_MAX_BYTES: int = 10 * 1024 * 1024  # 10MB
+    LOG_BACKUP_COUNT: int = 5
+    LOG_RETENTION_DAYS: int = 30
+    LOG_COMPRESSION_DAYS: int = 7
+    LOG_MAX_SIZE_MB: int = 100
+    CENTRALIZED_LOG_HOST: Optional[str] = None
+    CENTRALIZED_LOG_URL: Optional[str] = None
+    ENABLE_STRUCTURED_LOGGING: bool = True
+    
+    # Alerting Configuration
+    ENABLE_ALERTING: bool = True
+    ALERT_COOLDOWN_MINUTES: int = 15
+    ERROR_RATE_THRESHOLD: float = 10.0  # Percentage
+    SLOW_REQUEST_THRESHOLD: float = 2.0  # Seconds
+    
     @field_validator("BACKEND_CORS_ORIGINS", mode="before")
     @classmethod
     def assemble_cors_origins(cls, v: Union[str, List[str]]) -> Union[List[str], str]:

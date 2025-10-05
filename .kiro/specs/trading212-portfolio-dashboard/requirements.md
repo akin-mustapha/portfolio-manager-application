@@ -139,3 +139,20 @@ This document outlines the requirements for a Trading 212 Portfolio Manager Dash
 3. WHEN showing pie composition THEN the system SHALL display top holdings within each pie
 4. WHEN rebalancing is needed THEN the system SHALL provide indicators when pies are significantly out of balance
 5. WHEN allocation data changes THEN the system SHALL update all related visualizations and calculations
+
+## Non-Functional Requirements
+
+### Requirement 13: Logging and Monitoring
+
+**User Story:** As a system administrator, I want comprehensive logging and monitoring capabilities, so that I can troubleshoot issues, monitor system health, and ensure security compliance.
+
+#### Acceptance Criteria
+
+1. WHEN any critical event occurs (errors, warnings, authentication attempts) THEN the system SHALL log the event with appropriate severity level
+2. WHEN a log entry is created THEN the system SHALL include timestamp, user ID (if available), request context, and event details
+3. WHEN logs are written THEN the system SHALL store logs in both local storage and send to a centralized log server
+4. WHEN handling sensitive data THEN the system SHALL NOT log passwords, API keys, tokens, or other sensitive information
+5. WHEN authentication events occur THEN the system SHALL log login attempts, API key setup, and session management events
+6. WHEN API rate limits are encountered THEN the system SHALL log rate limiting events with timing and retry information
+7. WHEN Trading 212 API calls are made THEN the system SHALL log request/response metadata without sensitive payload data
+8. WHEN system errors occur THEN the system SHALL log stack traces and error context for debugging purposes

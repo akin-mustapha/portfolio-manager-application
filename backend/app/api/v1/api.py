@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 
 # Import routers
-from app.api.v1.endpoints import auth, portfolio, pies, benchmarks, dividends
+from app.api.v1.endpoints import auth, portfolio, pies, benchmarks, dividends, metrics
 
 api_router = APIRouter()
 
@@ -17,3 +17,4 @@ api_router.include_router(portfolio.router, prefix="/portfolio", tags=["portfoli
 api_router.include_router(pies.router, prefix="/pies", tags=["pies"])
 api_router.include_router(benchmarks.router, prefix="/benchmarks", tags=["benchmarks"])
 api_router.include_router(dividends.router, prefix="/dividends", tags=["dividends"])
+api_router.include_router(metrics.router, prefix="/metrics", tags=["metrics", "monitoring"])

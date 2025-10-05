@@ -7,13 +7,13 @@ import numpy as np
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import List, Dict, Optional, Tuple, Any
-from models.portfolio import Portfolio, PortfolioMetrics
-from models.pie import Pie, PieMetrics
-from models.position import Position
-from models.historical import HistoricalData, PricePoint
-from models.risk import RiskMetrics, RiskCategory
-from models.benchmark import BenchmarkComparison
-from models.dividend import Dividend
+from app.models.portfolio import Portfolio, PortfolioMetrics
+from app.models.pie import Pie, PieMetrics
+from app.models.position import Position
+from app.models.historical import HistoricalData, PricePoint
+from app.models.risk import RiskMetrics, RiskCategory
+from app.models.benchmark import BenchmarkComparison
+from app.models.dividend import Dividend
 
 
 class CalculationsService:
