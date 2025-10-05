@@ -169,7 +169,7 @@
     - Add pie-level allocation and holdings breakdown visualizations
     - _Requirements: 9.1, 10.1, 11.1, 12.1_
 
-  - [ ]* 8.4 Write visualization component tests
+  - [ ] 8.4 Write visualization component tests
     - Test chart rendering with mock data
     - Validate interactive features and data updates
     - _Requirements: 4.1, 6.1, 9.1_
@@ -187,7 +187,7 @@
     - Create loading states and error handling for data updates
     - _Requirements: 1.3, 3.4, 4.4_
 
-  - [ ]* 9.3 Write caching and real-time update tests
+  - [ ] 9.3 Write caching and real-time update tests
     - Test cache hit/miss scenarios and data freshness
     - Validate real-time update mechanisms
     - _Requirements: 3.4, 4.4_
@@ -224,7 +224,7 @@
     - Add input sanitization and SQL injection protection
     - _Requirements: 2.4_
 
-  - [ ]* 11.3 Write deployment and security tests
+  - [ ] 11.3 Write deployment and security tests
     - Test production configuration and environment setup
     - Validate security measures and rate limiting
     - _Requirements: 2.4_

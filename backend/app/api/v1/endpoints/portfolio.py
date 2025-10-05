@@ -16,6 +16,100 @@ import redis
 router = APIRouter()
 
 
+@router.get("", response_model=Dict[str, Any])
+async def get_portfolio(
+    user_id: str = Depends(get_current_user_id),
+    api_key: str = Depends(get_trading212_api_key),
+    redis_client: redis.Redis = Depends(get_redis)
+) -> Any:
+    """
+    Get portfolio data from Trading 212
+    """
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Trading 212 API key not configured"
+        )
+    
+    try:
+        # Use the Trading 212 service to fetch real portfolio data
+        async with Trading212Service() as service:
+            # Authenticate with Trading 212
+            auth_result = await service.authenticate(api_key)
+            if not auth_result.success:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail=f"Trading 212 authentication failed: {auth_result.message}"
+                )
+            
+            # Fetch account info to get basic portfolio data
+            account_info = await service.get_account_info()
+            cash_data = await service.get_cash_balance()
+            positions_data = await service.get_positions()
+            
+            # Calculate portfolio totals
+            total_value = Decimal('0')
+            total_invested = Decimal('0')
+            
+            for position in positions_data:
+                market_value = Decimal(str(position.get('marketValue', 0)))
+                quantity = Decimal(str(position.get('quantity', 0)))
+                avg_price = Decimal(str(position.get('averagePrice', 0)))
+                
+                total_value += market_value
+                total_invested += quantity * avg_price
+            
+            # Add cash balance to total value
+            cash_balance = Decimal(str(cash_data.get('free', 0)))
+            total_value += cash_balance
+            
+            # Calculate returns
+            total_return = total_value - total_invested
+            return_percentage = (total_return / total_invested * 100) if total_invested > 0 else Decimal('0')
+            
+            # Update last activity in session
+            session_key = f"session:{user_id}"
+            redis_client.hset(session_key, "last_activity", datetime.utcnow().isoformat())
+            
+            # Return real portfolio data from Trading 212
+            return {
+                "id": str(account_info.get("id", "unknown")),
+                "totalValue": float(total_value),
+                "totalInvested": float(total_invested),
+                "totalReturn": float(total_return),
+                "returnPercentage": float(return_percentage),
+                "cashBalance": float(cash_balance),
+                "currency": account_info.get("currencyCode", "USD"),
+                "lastUpdated": datetime.utcnow().isoformat()
+            }
+            
+    except Trading212APIError as e:
+        if e.error_type == "rate_limit_exceeded":
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Trading 212 API rate limit exceeded. Please try again later."
+            )
+        elif e.error_type == "authentication_failure":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Trading 212 authentication failed"
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Trading 212 API error: {e.message}"
+            )
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Portfolio endpoint error: {str(e)}")
+        print(f"Full traceback: {error_details}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch portfolio: {str(e)}"
+        )
+
+
 @router.get("/overview", response_model=Portfolio)
 async def get_portfolio_overview(
     user_id: str = Depends(get_current_user_id),

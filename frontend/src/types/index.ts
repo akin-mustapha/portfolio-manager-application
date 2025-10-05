@@ -16,7 +16,7 @@ export interface Pie {
   totalValue: number;
   investedAmount: number;
   returnPct: number;
-  positions: Position[];
+  positions?: Position[];
   createdAt: string;
   updatedAt: string;
 }

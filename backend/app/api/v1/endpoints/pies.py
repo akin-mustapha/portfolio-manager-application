@@ -1,6 +1,7 @@
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Dict
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Path
 from datetime import datetime
+from decimal import Decimal
 
 from app.core.deps import get_trading212_api_key, get_current_user_id
 from app.services.trading212_service import Trading212Service, Trading212APIError
@@ -8,6 +9,91 @@ from app.models.pie import Pie, PieMetrics
 from app.models.position import Position
 
 router = APIRouter()
+
+
+@router.get("", response_model=List[Dict[str, Any]])
+async def get_all_pies(
+    user_id: str = Depends(get_current_user_id),
+    api_key: str = Depends(get_trading212_api_key)
+) -> Any:
+    """
+    Get all pies from Trading 212 account
+    """
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Trading 212 API key not configured"
+        )
+    
+    try:
+        # Use the Trading 212 service to fetch real pies data
+        async with Trading212Service() as service:
+            # Authenticate with Trading 212
+            auth_result = await service.authenticate(api_key)
+            if not auth_result.success:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail=f"Trading 212 authentication failed: {auth_result.message}"
+                )
+            
+            # Fetch pies data from Trading 212
+            pies_data = await service.get_pies()
+            
+            # Transform the data to match frontend expectations
+            transformed_pies = []
+            for pie in pies_data:
+                # Get pie details if needed
+                pie_details = await service.get_pie_details(pie.get('id', ''))
+                
+                # Calculate metrics from pie details
+                total_value = Decimal('0')
+                invested_amount = Decimal('0')
+                
+                # Sum up all instruments in the pie
+                for instrument in pie_details.get('instruments', []):
+                    market_value = Decimal(str(instrument.get('currentValue', 0)))
+                    quantity = Decimal(str(instrument.get('quantity', 0)))
+                    avg_price = Decimal(str(instrument.get('averagePrice', 0)))
+                    
+                    total_value += market_value
+                    invested_amount += quantity * avg_price
+                
+                # Calculate return percentage
+                return_pct = ((total_value - invested_amount) / invested_amount * 100) if invested_amount > 0 else Decimal('0')
+                
+                transformed_pies.append({
+                    "id": pie.get('id', ''),
+                    "name": pie.get('name', ''),
+                    "totalValue": float(total_value),
+                    "investedAmount": float(invested_amount),
+                    "returnPct": float(return_pct),
+                    "createdAt": pie.get('creationTime', datetime.utcnow().isoformat()),
+                    "updatedAt": datetime.utcnow().isoformat()
+                })
+            
+            return transformed_pies
+            
+    except Trading212APIError as e:
+        if e.error_type == "rate_limit_exceeded":
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Trading 212 API rate limit exceeded. Please try again later."
+            )
+        elif e.error_type == "authentication_failure":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Trading 212 authentication failed"
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Trading 212 API error: {e.message}"
+            )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch pies: {str(e)}"
+        )
 
 
 @router.get("/{pie_id}", response_model=Pie)

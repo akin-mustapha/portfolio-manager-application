@@ -7,8 +7,13 @@ import ApiSetup from '../ApiSetup';
 const mockAuth = {
   authState: {
     isAuthenticated: false,
-    connectionStatus: 'disconnected' as const,
-    accountInfo: undefined,
+    connectionStatus: 'disconnected' as 'connected' | 'disconnected' | 'connecting' | 'error',
+    accountInfo: undefined as any,
+    apiKey: undefined as string | undefined,
+    sessionId: undefined as string | undefined,
+    sessionName: undefined as string | undefined,
+    tokenExpiresAt: undefined as Date | undefined,
+    lastConnected: undefined as Date | undefined,
   },
   initializeSession: jest.fn(),
   setupTrading212API: jest.fn(),
@@ -18,7 +23,7 @@ const mockAuth = {
   disconnectTrading212: jest.fn(),
   setConnectionStatus: jest.fn(),
   isAuthenticated: false,
-  connectionStatus: 'disconnected' as const,
+  connectionStatus: 'disconnected' as 'connected' | 'disconnected' | 'connecting' | 'error',
   isTokenExpired: jest.fn(() => false),
   hasTrading212Connection: false,
 };
@@ -174,8 +179,8 @@ describe('ApiSetup', () => {
     mockAuth.authState.isAuthenticated = true;
     mockAuth.authState.connectionStatus = 'connected';
     mockAuth.authState.accountInfo = {
-      accountId: 'test-account-id',
-      accountType: 'equity',
+      account_id: 'test-account-id',
+      account_type: 'equity',
     };
     mockAuth.hasTrading212Connection = true;
     mockAuth.connectionStatus = 'connected';
@@ -281,7 +286,7 @@ describe('ApiSetup', () => {
     mockAuth.authState.connectionStatus = 'connected';
     mockAuth.hasTrading212Connection = true;
     mockAuth.connectionStatus = 'connected';
-    mockAuth.clearAuth.mockResolvedValue();
+    mockAuth.clearAuth.mockResolvedValue(undefined);
 
     renderWithProviders(<ApiSetup />);
 
@@ -301,7 +306,7 @@ describe('ApiSetup', () => {
     mockAuth.authState.apiKey = 'test-api-key';
     mockAuth.hasTrading212Connection = true;
     mockAuth.connectionStatus = 'connected';
-    mockAuth.validateTrading212API.mockResolvedValue({ isValid: true });
+    mockAuth.validateTrading212API.mockResolvedValue({ is_valid: true });
 
     renderWithProviders(<ApiSetup />);
 

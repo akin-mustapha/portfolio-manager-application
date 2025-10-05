@@ -1,38 +1,83 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAppContext } from '../contexts/AppContext';
 import { apiService } from '../services/api';
 import MetricCard from '../components/MetricCard';
 import PieChart from '../components/PieChart';
 import PieList from '../components/PieList';
 import ConnectionStatus from '../components/ConnectionStatus';
+import AuthTest from '../components/AuthTest';
 import { Pie, Portfolio } from '../types';
 
 const Dashboard: React.FC = () => {
   const { auth } = useAppContext();
+  const queryClient = useQueryClient();
 
-  // Fetch portfolio data
+  // Fetch data when user is authenticated and has Trading 212 connection
   const { data: portfolioData, isLoading: portfolioLoading, error: portfolioError } = useQuery({
     queryKey: ['portfolio'],
     queryFn: apiService.getPortfolio,
-    enabled: auth.isAuthenticated,
-    refetchInterval: 5 * 60 * 1000, // Refetch every 5 minutes
+    enabled: auth.isAuthenticated && auth.hasTrading212Connection,
+    retry: 3, // Exactly 3 retries
+    refetchInterval: false, // Disable automatic refetching
+    refetchOnWindowFocus: false,
   });
 
   // Fetch pies data
   const { data: piesData, isLoading: piesLoading, error: piesError } = useQuery({
     queryKey: ['pies'],
     queryFn: apiService.getPies,
-    enabled: auth.isAuthenticated,
-    refetchInterval: 5 * 60 * 1000, // Refetch every 5 minutes
+    enabled: auth.isAuthenticated && auth.hasTrading212Connection,
+    retry: 3, // Exactly 3 retries
+    refetchInterval: false, // Disable automatic refetching
+    refetchOnWindowFocus: false,
   });
 
   const portfolio: Portfolio | undefined = portfolioData;
   const pies: Pie[] = piesData || [];
 
-  // Show connection prompt if not authenticated
-  if (!auth.isAuthenticated) {
+  // Debug logging (only in development)
+  if (process.env.NODE_ENV === 'development') {
+    console.log('Dashboard render:', {
+      isAuthenticated: auth.isAuthenticated,
+      hasTrading212Connection: auth.hasTrading212Connection,
+      portfolioData,
+      piesData,
+      portfolioLoading,
+      piesLoading,
+      portfolioError,
+      piesError
+    });
+  }
+
+  // Show loading state while data is being fetched
+  if (portfolioLoading || piesLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="bg-white rounded-lg shadow p-6">
+          <div className="animate-pulse">
+            <div className="h-8 bg-gray-200 rounded w-1/3 mb-4"></div>
+            <div className="h-4 bg-gray-200 rounded w-2/3"></div>
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          {[...Array(4)].map((_, index) => (
+            <MetricCard
+              key={index}
+              title="Loading..."
+              value="--"
+              loading={true}
+            />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // Show connection prompt if not authenticated or no Trading 212 connection
+  if (!auth.isAuthenticated || !auth.hasTrading212Connection) {
     return (
       <div className="space-y-6">
         <div className="bg-white rounded-lg shadow p-6">
@@ -41,20 +86,32 @@ const Dashboard: React.FC = () => {
           </h2>
           <p className="text-gray-600 mb-6">
             Welcome to your Trading 212 Portfolio Dashboard. 
-            Connect your Trading 212 API to get started.
+            {!auth.isAuthenticated 
+              ? 'Create a session and connect your Trading 212 API to get started.'
+              : 'Connect your Trading 212 API to view your portfolio data.'
+            }
           </p>
+          
+          {/* Debug information and test component */}
+          {process.env.NODE_ENV === 'development' && (
+            <AuthTest />
+          )}
+          
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
               <ConnectionStatus />
               <span className="text-sm text-gray-500">
-                API connection required to view portfolio data
+                {!auth.isAuthenticated 
+                  ? 'Session and API connection required'
+                  : 'Trading 212 API connection required'
+                }
               </span>
             </div>
             <Link
               to="/api-setup"
               className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
             >
-              Connect API
+              {!auth.isAuthenticated ? 'Setup Connection' : 'Connect Trading 212'}
             </Link>
           </div>
         </div>
@@ -64,19 +121,19 @@ const Dashboard: React.FC = () => {
           <MetricCard
             title="Total Value"
             value="--"
-            subtitle="Connect API to view data"
+            subtitle={!auth.isAuthenticated ? 'Setup required' : 'Connect API to view data'}
             loading={false}
           />
           <MetricCard
             title="Total Return"
             value="--"
-            subtitle="Connect API to view data"
+            subtitle={!auth.isAuthenticated ? 'Setup required' : 'Connect API to view data'}
             loading={false}
           />
           <MetricCard
             title="Active Pies"
             value="--"
-            subtitle="Connect API to view data"
+            subtitle={!auth.isAuthenticated ? 'Setup required' : 'Connect API to view data'}
             loading={false}
           />
         </div>
@@ -86,8 +143,12 @@ const Dashboard: React.FC = () => {
 
   // Show error state
   if (portfolioError || piesError) {
-    const errorMessage = (portfolioError as any)?.message || (piesError as any)?.message || 'An unexpected error occurred';
+    const portfolioErr = portfolioError as any;
+    const piesErr = piesError as any;
+    const errorMessage = portfolioErr?.message || piesErr?.message || 'An unexpected error occurred';
+    const errorStatus = portfolioErr?.status || piesErr?.status;
     const isConnectionError = errorMessage.toLowerCase().includes('network') || errorMessage.toLowerCase().includes('connection');
+    const isAuthError = errorStatus === 401 || errorStatus === 403;
     
     return (
       <div className="space-y-6">
@@ -96,34 +157,44 @@ const Dashboard: React.FC = () => {
             <div className="text-red-400 mr-3 text-2xl">⚠️</div>
             <div className="flex-1">
               <h3 className="text-lg font-medium text-red-800">
-                {isConnectionError ? 'Connection Error' : 'Failed to load portfolio data'}
+                {isAuthError ? 'Authentication Error' : 
+                 isConnectionError ? 'Connection Error' : 
+                 'Failed to load portfolio data'}
               </h3>
               <p className="text-red-700 mt-1">
                 {errorMessage}
               </p>
+              {errorStatus && (
+                <p className="text-red-600 mt-1 text-sm">
+                  Error Code: {errorStatus}
+                </p>
+              )}
               {isConnectionError && (
                 <p className="text-red-600 mt-2 text-sm">
                   Please check your internet connection and Trading 212 API status.
                 </p>
               )}
+              {isAuthError && (
+                <p className="text-red-600 mt-2 text-sm">
+                  Your session may have expired. Please reconnect your Trading 212 API.
+                </p>
+              )}
               <div className="mt-4 flex flex-wrap gap-3">
                 <button
-                  onClick={() => window.location.reload()}
+                  onClick={() => {
+                    // Clear React Query cache and retry
+                    queryClient.invalidateQueries({ queryKey: ['portfolio'] });
+                    queryClient.invalidateQueries({ queryKey: ['pies'] });
+                  }}
                   className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 text-sm font-medium"
                 >
-                  Retry Loading
+                  Retry Now
                 </button>
                 <Link
                   to="/api-setup"
                   className="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700 text-sm font-medium"
                 >
                   Check API Setup
-                </Link>
-                <Link
-                  to="/settings"
-                  className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 text-sm font-medium"
-                >
-                  Settings
                 </Link>
               </div>
             </div>
@@ -165,6 +236,39 @@ const Dashboard: React.FC = () => {
     );
   }
 
+  // Show empty state if no data is available
+  if (!portfolio && !portfolioLoading && !pies.length && !piesLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="bg-white rounded-lg shadow p-6">
+          <h2 className="text-2xl font-bold text-gray-900 mb-4">
+            Portfolio Overview
+          </h2>
+          <div className="text-center py-12">
+            <div className="text-gray-400 text-6xl mb-4">📊</div>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">Ready to Load Your Portfolio</h3>
+            <p className="text-gray-500 mb-6">
+              Your Trading 212 connection is set up. Click "Fetch Data" below to load your portfolio information.
+            </p>
+            {process.env.NODE_ENV === 'development' && (
+              <div className="mb-6">
+                <AuthTest />
+              </div>
+            )}
+            <div className="flex justify-center space-x-3">
+              <Link
+                to="/api-setup"
+                className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
+              >
+                Manage API Connection
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -189,46 +293,48 @@ const Dashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Key Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <MetricCard
-          title="Total Value"
-          value={portfolio?.totalValue ? `£${portfolio.totalValue.toLocaleString()}` : '--'}
-          loading={portfolioLoading}
-          trend={portfolio?.totalReturn ? {
-            value: portfolio.totalReturn,
-            isPositive: portfolio.totalReturn >= 0,
-            prefix: '£'
-          } : undefined}
-          icon="💰"
-        />
-        <MetricCard
-          title="Total Return"
-          value={portfolio?.returnPercentage ? `${portfolio.returnPercentage.toFixed(2)}%` : '--'}
-          loading={portfolioLoading}
-          trend={portfolio?.totalReturn ? {
-            value: portfolio.totalReturn,
-            isPositive: portfolio.totalReturn >= 0,
-            prefix: '£'
-          } : undefined}
-          subtitle={portfolio?.totalReturn ? `${portfolio.totalReturn >= 0 ? '+' : ''}£${portfolio.totalReturn.toLocaleString()}` : undefined}
-          icon="📈"
-        />
-        <MetricCard
-          title="Total Invested"
-          value={portfolio?.totalInvested ? `£${portfolio.totalInvested.toLocaleString()}` : '--'}
-          loading={portfolioLoading}
-          subtitle="Capital deployed"
-          icon="💼"
-        />
-        <MetricCard
-          title="Active Pies"
-          value={pies.length.toString()}
-          loading={piesLoading}
-          subtitle={`${pies.filter(pie => pie.totalValue > 0).length} with positions`}
-          icon="🥧"
-        />
-      </div>
+      {/* Key Metrics - Only show if we have portfolio data */}
+      {portfolio && (
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <MetricCard
+            title="Total Value"
+            value={portfolio.totalValue ? `£${portfolio.totalValue.toLocaleString()}` : '--'}
+            loading={portfolioLoading}
+            trend={portfolio.totalReturn ? {
+              value: portfolio.totalReturn,
+              isPositive: portfolio.totalReturn >= 0,
+              prefix: '£'
+            } : undefined}
+            icon="💰"
+          />
+          <MetricCard
+            title="Total Return"
+            value={portfolio.returnPercentage ? `${portfolio.returnPercentage.toFixed(2)}%` : '--'}
+            loading={portfolioLoading}
+            trend={portfolio.totalReturn ? {
+              value: portfolio.totalReturn,
+              isPositive: portfolio.totalReturn >= 0,
+              prefix: '£'
+            } : undefined}
+            subtitle={portfolio.totalReturn ? `${portfolio.totalReturn >= 0 ? '+' : ''}£${portfolio.totalReturn.toLocaleString()}` : undefined}
+            icon="📈"
+          />
+          <MetricCard
+            title="Total Invested"
+            value={portfolio.totalInvested ? `£${portfolio.totalInvested.toLocaleString()}` : '--'}
+            loading={portfolioLoading}
+            subtitle="Capital deployed"
+            icon="💼"
+          />
+          <MetricCard
+            title="Active Pies"
+            value={pies.length.toString()}
+            loading={piesLoading}
+            subtitle={`${pies.filter(pie => pie.totalValue > 0).length} with positions`}
+            icon="🥧"
+          />
+        </div>
+      )}
 
       {/* Performance Summary */}
       {portfolio && (
@@ -271,43 +377,45 @@ const Dashboard: React.FC = () => {
         </div>
       )}
 
-      {/* Portfolio Allocation and Pies */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Portfolio Allocation Chart */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">
-            Portfolio Allocation
-          </h3>
-          <PieChart
-            data={pies.map(pie => ({
-              name: pie.name,
-              value: pie.totalValue,
-              percentage: portfolio?.totalValue ? (pie.totalValue / portfolio.totalValue) * 100 : 0
-            }))}
-            loading={piesLoading}
-          />
-        </div>
-
-        {/* Pie Performance List */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-medium text-gray-900">
-              Pie Performance
+      {/* Portfolio Allocation and Pies - Only show if we have data */}
+      {portfolio && pies.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Portfolio Allocation Chart */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">
+              Portfolio Allocation
             </h3>
-            <Link
-              to="/pie-analysis"
-              className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-            >
-              View Details →
-            </Link>
+            <PieChart
+              data={pies.map(pie => ({
+                name: pie.name,
+                value: pie.totalValue,
+                percentage: portfolio.totalValue ? (pie.totalValue / portfolio.totalValue) * 100 : 0
+              }))}
+              loading={piesLoading}
+            />
           </div>
-          <PieList
-            pies={pies}
-            loading={piesLoading}
-            maxItems={5}
-          />
+
+          {/* Pie Performance List */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-medium text-gray-900">
+                Pie Performance
+              </h3>
+              <Link
+                to="/pie-analysis"
+                className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+              >
+                View Details →
+              </Link>
+            </div>
+            <PieList
+              pies={pies}
+              loading={piesLoading}
+              maxItems={5}
+            />
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

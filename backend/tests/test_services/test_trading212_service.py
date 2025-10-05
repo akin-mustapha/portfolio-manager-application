@@ -618,24 +618,35 @@ class TestTrading212ServiceDataTransformation:
     
     def test_transform_dividend_data_success(self, service):
         """Test successful dividend data transformation."""
-        # This test should verify that the transformation handles the expected error
-        # since the current implementation doesn't match the Dividend model structure
         raw_dividend = {
             "ticker": "AAPL",
             "amount": 2.50,
             "amountInEuro": {"amount": 2.30, "currency": "EUR"},
-            "paidOn": "2024-01-15T00:00:00",
+            "paidOn": "2024-01-15T00:00:00Z",
             "type": "ORDINARY",
             "quantity": 10,
             "grossAmountPerShare": 0.25,
-            "withholdingTax": 0.0
+            "withholdingTax": 0.0,
+            "name": "Apple Inc."
         }
         
-        # The current implementation should raise an error due to model mismatch
-        with pytest.raises(Trading212APIError) as exc_info:
-            service._transform_dividend_data(raw_dividend)
+        dividend = service._transform_dividend_data(raw_dividend)
         
-        assert "Invalid dividend data" in exc_info.value.message
+        # Verify transformation
+        assert dividend.symbol == "AAPL"
+        assert dividend.security_name == "Apple Inc."
+        assert dividend.total_amount == Decimal("2.50")
+        assert dividend.shares_held == Decimal("10")
+        assert dividend.amount_per_share == Decimal("0.25")  # total_amount / shares_held
+        assert dividend.gross_amount == Decimal("2.50")  # grossAmountPerShare * shares_held
+        assert dividend.tax_withheld == Decimal("0.0")
+        assert dividend.net_amount == Decimal("2.50")  # gross_amount - tax_withheld
+        assert dividend.currency == "USD"  # Default currency
+        assert dividend.base_currency_amount == Decimal("2.30")  # From amountInEuro
+        assert dividend.is_reinvested is False
+        assert dividend.payment_date.year == 2024
+        assert dividend.payment_date.month == 1
+        assert dividend.payment_date.day == 15
 
 
 class TestTrading212ServiceHealthCheck:

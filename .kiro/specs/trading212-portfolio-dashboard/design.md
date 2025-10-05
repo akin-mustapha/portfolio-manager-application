@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Trading 212 Portfolio Manager Dashboard is a modern web application built with React/TypeScript frontend and Node.js backend. The system integrates with Trading 212's REST API to fetch real-time portfolio data and provides comprehensive analytics through interactive visualizations. The architecture follows a microservices pattern with clear separation between data fetching, processing, and presentation layers.
+The Trading 212 Portfolio Manager Dashboard is a modern web application built with React/TypeScript frontend and Python FastAPI backend. The system integrates with Trading 212's REST API to fetch real-time portfolio data and provides comprehensive analytics through interactive visualizations. The architecture follows a microservices pattern with clear separation between data fetching, processing, and presentation layers.
 
 ## Architecture
 
@@ -17,7 +17,7 @@ graph TB
     end
     
     subgraph "Backend Layer"
-        API[Express.js API Server]
+        API[FastAPI Server]
         Auth[Authentication Service]
         Cache[Redis Cache Layer]
     end

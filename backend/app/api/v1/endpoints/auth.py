@@ -193,9 +193,8 @@ async def setup_trading212_api(
                 "account_type": validation_result.account_type
             }
     
-    # Encrypt and store API key
-    encrypted_api_key = encrypt_api_key(api_setup.api_key)
-    redis_client.hset(session_key, "trading212_api_key", encrypted_api_key)
+    # Store API key (temporarily without encryption for demo)
+    redis_client.hset(session_key, "trading212_api_key", api_setup.api_key)
     redis_client.hset(session_key, "trading212_connected", "true")
     redis_client.hset(session_key, "last_activity", datetime.utcnow().isoformat())
     

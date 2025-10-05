@@ -48,13 +48,14 @@ apiClient.interceptors.request.use(
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
-    console.error('API Error:', {
+    console.error('API Error Details:', {
       message: error.message,
       status: error.response?.status,
       statusText: error.response?.statusText,
       url: error.config?.url,
       method: error.config?.method,
-      baseURL: error.config?.baseURL
+      baseURL: error.config?.baseURL,
+      data: error.response?.data
     });
     
     const originalRequest = error.config;
