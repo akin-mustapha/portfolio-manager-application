@@ -7,21 +7,43 @@ import Dashboard from './pages/Dashboard';
 import ApiSetup from './pages/ApiSetup';
 import PieAnalysis from './pages/PieAnalysis';
 import Settings from './pages/Settings';
+import AnimationDemo from './components/AnimationDemo';
+import PortfolioOverview from './components/PortfolioOverview';
 import './App.css';
 
 function AppContent() {
   useAuthError();
 
   return (
-    <Layout>
-      <Routes>
-        <Route path="/" element={<Dashboard />} />
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/api-setup" element={<ApiSetup />} />
-        <Route path="/pie-analysis" element={<PieAnalysis />} />
-        <Route path="/settings" element={<Settings />} />
-      </Routes>
-    </Layout>
+    <Routes>
+      <Route path="/" element={
+        <Layout>
+          <Dashboard />
+        </Layout>
+      } />
+      <Route path="/dashboard" element={
+        <Layout>
+          <Dashboard />
+        </Layout>
+      } />
+      <Route path="/portfolio" element={<PortfolioOverview />} />
+      <Route path="/api-setup" element={
+        <Layout>
+          <ApiSetup />
+        </Layout>
+      } />
+      <Route path="/pie-analysis" element={
+        <Layout>
+          <PieAnalysis />
+        </Layout>
+      } />
+      <Route path="/settings" element={
+        <Layout>
+          <Settings />
+        </Layout>
+      } />
+      <Route path="/animation-demo" element={<AnimationDemo />} />
+    </Routes>
   );
 }
 

@@ -72,7 +72,7 @@ describe('MetricCard', () => {
         />
       );
       
-      expect(screen.getByText('↗️')).toBeInTheDocument();
+      expect(screen.getByLabelText('arrow up right')).toBeInTheDocument();
       expect(screen.getByText('+5.2%')).toBeInTheDocument();
       
       const trendElement = screen.getByText('+5.2%').closest('.text-green-600');
@@ -94,7 +94,7 @@ describe('MetricCard', () => {
         />
       );
       
-      expect(screen.getByText('↘️')).toBeInTheDocument();
+      expect(screen.getByLabelText('arrow down right')).toBeInTheDocument();
       expect(screen.getByText('3.1%')).toBeInTheDocument(); // Absolute value
       
       const trendElement = screen.getByText('3.1%').closest('.text-red-600');

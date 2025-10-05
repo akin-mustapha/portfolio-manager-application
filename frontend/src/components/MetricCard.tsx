@@ -1,4 +1,5 @@
 import React from 'react';
+import { Icon } from './icons';
 
 interface TrendData {
   value: number;
@@ -13,7 +14,7 @@ interface MetricCardProps {
   subtitle?: string;
   loading?: boolean;
   trend?: TrendData;
-  icon?: string;
+  icon?: string | React.ReactNode;
 }
 
 const MetricCard: React.FC<MetricCardProps> = ({
@@ -49,7 +50,11 @@ const MetricCard: React.FC<MetricCardProps> = ({
         <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wide">
           {title}
         </h3>
-        {icon && <span className="text-2xl">{icon}</span>}
+        {icon && (
+          <div className="text-gray-400">
+            {typeof icon === 'string' ? <span className="text-2xl">{icon}</span> : icon}
+          </div>
+        )}
       </div>
       
       <div className="flex items-baseline space-x-2">
@@ -62,7 +67,10 @@ const MetricCard: React.FC<MetricCardProps> = ({
             trend.isPositive ? 'text-green-600' : 'text-red-600'
           }`}>
             <span className="mr-1">
-              {trend.isPositive ? '↗️' : '↘️'}
+              <Icon 
+                name={trend.isPositive ? 'ArrowUpRight' : 'ArrowDownRight'} 
+                size="sm" 
+              />
             </span>
             {formatTrendValue(trend)}
           </div>

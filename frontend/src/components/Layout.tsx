@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAppContext } from '../contexts/AppContext';
+import { Icon } from './icons';
 import ConnectionStatus from './ConnectionStatus';
 
 interface LayoutProps {
@@ -13,10 +14,10 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const { auth } = useAppContext();
 
   const navigation = [
-    { name: 'Dashboard', href: '/dashboard', icon: '📊' },
-    { name: 'API Setup', href: '/api-setup', icon: '🔑' },
-    { name: 'Pie Analysis', href: '/pie-analysis', icon: '🥧' },
-    { name: 'Settings', href: '/settings', icon: '⚙️' },
+    { name: 'Dashboard', href: '/dashboard', icon: <Icon name="BarChart" size="sm" /> },
+    { name: 'API Setup', href: '/api-setup', icon: <Icon name="Key" size="sm" /> },
+    { name: 'Pie Analysis', href: '/pie-analysis', icon: <Icon name="PieChart" size="sm" /> },
+    { name: 'Settings', href: '/settings', icon: <Icon name="Settings" size="sm" /> },
   ];
 
   const isCurrentPath = (path: string) => {
@@ -36,7 +37,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                 onClick={() => setSidebarOpen(false)}
                 className="text-gray-400 hover:text-gray-600"
               >
-                ✕
+                <Icon name="X" size="sm" />
               </button>
             </div>
             <nav className="flex-1 px-4 py-4 space-y-2">
@@ -97,7 +98,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                   onClick={() => setSidebarOpen(true)}
                   className="lg:hidden text-gray-500 hover:text-gray-700 mr-4"
                 >
-                  ☰
+                  <Icon name="Menu" size="md" />
                 </button>
                 <h1 className="text-xl font-semibold text-gray-900 lg:hidden">
                   Trading 212 Portfolio Dashboard
@@ -106,10 +107,11 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
               <div className="flex items-center space-x-4">
                 <div className="flex items-center space-x-2">
                   <span className="text-sm text-gray-500">API Status:</span>
-                  <ConnectionStatus size="sm" />
+                  <ConnectionStatus size="sm" variant="icon" />
                 </div>
-                <button className="bg-blue-600 text-white px-3 py-1 rounded-md text-sm hover:bg-blue-700">
-                  Refresh
+                <button className="bg-blue-600 text-white px-3 py-1 rounded-md text-sm hover:bg-blue-700 flex items-center space-x-1">
+                  <Icon name="Refresh" size="sm" animation="rotate" />
+                  <span>Refresh</span>
                 </button>
               </div>
             </div>

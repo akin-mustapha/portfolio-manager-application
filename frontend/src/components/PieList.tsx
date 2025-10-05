@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { Icon } from './icons';
 import { Pie } from '../types';
 
 interface PieListProps {
@@ -39,7 +40,9 @@ const PieList: React.FC<PieListProps> = ({
   if (!pies || pies.length === 0) {
     return (
       <div className="text-center py-8">
-        <div className="text-gray-400 text-4xl mb-2">🥧</div>
+        <div className="text-gray-400 mb-2">
+          <Icon name="PieChart" size="2xl" />
+        </div>
         <p className="text-gray-500">No pies found</p>
         <p className="text-sm text-gray-400 mt-1">
           Create pies in your Trading 212 account to see them here
@@ -51,9 +54,12 @@ const PieList: React.FC<PieListProps> = ({
   const displayPies = maxItems ? pies.slice(0, maxItems) : pies;
   const hasMore = maxItems && pies.length > maxItems;
 
-  const formatReturn = (pie: Pie) => {
-    // Calculate return amount from percentage and invested amount
-    const returnAmount = (pie.returnPct / 100) * pie.investedAmount;
+  const formatReturn = (pie: any) => {
+    // Handle both returnPct and returnPercentage fields for backward compatibility
+    const returnPct = pie.returnPct ?? pie.returnPercentage ?? 0;
+    
+    // Use provided returnAmount if available, otherwise calculate from percentage
+    const returnAmount = pie.returnAmount ?? ((returnPct / 100) * pie.investedAmount);
     const isPositive = returnAmount >= 0;
     const color = isPositive ? 'text-green-600' : 'text-red-600';
     const sign = isPositive ? '+' : '';
@@ -64,7 +70,7 @@ const PieList: React.FC<PieListProps> = ({
           {sign}£{Math.abs(returnAmount).toLocaleString()}
         </div>
         <div className="text-sm">
-          {sign}{pie.returnPct.toFixed(2)}%
+          {sign}{returnPct.toFixed(2)}%
         </div>
       </div>
     );

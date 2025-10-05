@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAppContext } from '../contexts/AppContext';
 import { apiService } from '../services/api';
+import { Icon } from './icons';
 
 const AuthTest: React.FC = () => {
   const { auth } = useAppContext();
@@ -21,12 +22,12 @@ const AuthTest: React.FC = () => {
       // Step 1: Create session
       addResult('Creating session...');
       await auth.initializeSession('Test Session');
-      addResult('✅ Session created successfully');
+      addResult('[✓] Session created successfully');
       
       // Step 2: Setup API key
       addResult('Setting up Trading 212 API...');
       await auth.setupTrading212API('demo-api-key-12345', false);
-      addResult('✅ Trading 212 API setup successfully');
+      addResult('[✓] Trading 212 API setup successfully');
       
       // Step 3: Test portfolio endpoint
       addResult('Fetching portfolio data...');

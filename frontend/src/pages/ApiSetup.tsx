@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAppContext } from '../contexts/AppContext';
 import { useMutation } from '@tanstack/react-query';
+import { Icon } from '../components/icons';
 
 const ApiSetup: React.FC = () => {
   const { auth } = useAppContext();
@@ -178,10 +179,26 @@ const ApiSetup: React.FC = () => {
   };
 
   const getSecurityLevel = () => {
-    if (!auth.isAuthenticated) return { level: 'None', color: 'text-gray-500', icon: '🔒' };
-    if (!auth.hasTrading212Connection) return { level: 'Session Only', color: 'text-yellow-600', icon: '🔐' };
-    if (auth.connectionStatus === 'connected') return { level: 'Fully Secured', color: 'text-green-600', icon: '🔐' };
-    return { level: 'Partial', color: 'text-yellow-600', icon: '🔐' };
+    if (!auth.isAuthenticated) return { 
+      level: 'None', 
+      color: 'text-gray-500', 
+      icon: <Icon name="Lock" size="sm" className="text-gray-500" />
+    };
+    if (!auth.hasTrading212Connection) return { 
+      level: 'Session Only', 
+      color: 'text-yellow-600', 
+      icon: <Icon name="Shield" size="sm" className="text-yellow-600" />
+    };
+    if (auth.connectionStatus === 'connected') return { 
+      level: 'Fully Secured', 
+      color: 'text-green-600', 
+      icon: <Icon name="CheckCircle" size="sm" className="text-green-600" />
+    };
+    return { 
+      level: 'Partial', 
+      color: 'text-yellow-600', 
+      icon: <Icon name="AlertCircle" size="sm" className="text-yellow-600" />
+    };
   };
 
   const isTokenExpiringSoon = () => {
@@ -236,7 +253,10 @@ const ApiSetup: React.FC = () => {
             {auth.isAuthenticated && (
               <div className="flex items-center space-x-4">
                 {isTokenExpiringSoon() && (
-                  <span className="text-yellow-600 text-xs">⚠️ Token expires soon</span>
+                  <span className="text-yellow-600 text-xs flex items-center">
+                    <Icon name="AlertTriangle" size="xs" className="mr-1" />
+                    Token expires soon
+                  </span>
                 )}
                 {auth.authState.tokenExpiresAt && (
                   <span className="text-xs opacity-75">
@@ -253,7 +273,9 @@ const ApiSetup: React.FC = () => {
       {errors.length > 0 && (
         <div className="bg-red-50 border border-red-200 rounded-md p-4">
           <div className="flex">
-            <div className="text-red-400 mr-2">⚠️</div>
+            <div className="text-red-400 mr-2">
+              <Icon name="AlertTriangle" size="sm" />
+            </div>
             <div>
               <h4 className="text-sm font-medium text-red-800">
                 {errors.length === 1 ? 'Error' : 'Errors'}
@@ -304,12 +326,13 @@ const ApiSetup: React.FC = () => {
             >
               {createSessionMutation.isPending ? (
                 <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  <Icon name="Refresh" size="sm" animation="spin" className="mr-2" />
                   Creating Session...
                 </>
               ) : (
                 <>
-                  🚀 Create Session
+                  <Icon name="Play" size="sm" className="mr-2" />
+                  Create Session
                 </>
               )}
             </button>
@@ -363,7 +386,7 @@ const ApiSetup: React.FC = () => {
                     onClick={() => setShowApiKey(!showApiKey)}
                     className="text-gray-400 hover:text-gray-600 focus:outline-none"
                   >
-                    {showApiKey ? '🙈' : '👁️'}
+                    <Icon name={showApiKey ? 'EyeOff' : 'Eye'} size="sm" />
                   </button>
                 </div>
               </div>
@@ -387,20 +410,22 @@ const ApiSetup: React.FC = () => {
               >
                 {setupApiKeyMutation.isPending ? (
                   <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    <Icon name="Refresh" size="sm" animation="spin" className="mr-2" />
                     Connecting...
                   </>
                 ) : (
                   <>
-                    🔗 Connect to Trading 212
+                    <Icon name="Wifi" size="sm" className="mr-2" />
+                    Connect to Trading 212
                   </>
                 )}
               </button>
               <button
                 type="button"
                 onClick={handleFullReset}
-                className="bg-gray-600 text-white py-2 px-4 rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
+                className="bg-gray-600 text-white py-2 px-4 rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 flex items-center"
               >
+                <Icon name="Refresh" size="sm" className="mr-2" />
                 Reset Session
               </button>
             </div>
@@ -417,7 +442,9 @@ const ApiSetup: React.FC = () => {
           
           <div className="bg-green-50 border border-green-200 rounded-md p-4 mb-4">
             <div className="flex items-center">
-              <div className="text-green-400 mr-2">✅</div>
+              <div className="text-green-400 mr-2">
+                <Icon name="CheckCircle" size="sm" />
+              </div>
               <div>
                 <h4 className="text-sm font-medium text-green-800">
                   Successfully Connected
@@ -447,12 +474,13 @@ const ApiSetup: React.FC = () => {
             >
               {validateApiMutation.isPending ? (
                 <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  <Icon name="Refresh" size="sm" animation="spin" className="mr-2" />
                   Testing...
                 </>
               ) : (
                 <>
-                  🔍 Test Connection
+                  <Icon name="Search" size="sm" className="mr-2" />
+                  Test Connection
                 </>
               )}
             </button>
@@ -463,12 +491,13 @@ const ApiSetup: React.FC = () => {
             >
               {disconnectMutation.isPending ? (
                 <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  <Icon name="Refresh" size="sm" animation="spin" className="mr-2" />
                   Disconnecting...
                 </>
               ) : (
                 <>
-                  🔌 Disconnect API
+                  <Icon name="WifiOff" size="sm" className="mr-2" />
+                  Disconnect API
                 </>
               )}
             </button>
@@ -476,7 +505,8 @@ const ApiSetup: React.FC = () => {
               onClick={handleFullReset}
               className="flex items-center justify-center bg-red-600 text-white py-2 px-4 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
             >
-              🔄 Reset All
+              <Icon name="Refresh" size="sm" className="mr-2" />
+              Reset All
             </button>
           </div>
         </div>
@@ -497,7 +527,10 @@ const ApiSetup: React.FC = () => {
         <div className="mt-4 space-y-3">
           <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-md">
             <p className="text-sm text-yellow-800">
-              <strong>🔒 Security Features:</strong>
+              <strong className="flex items-center">
+                <Icon name="Lock" size="sm" className="mr-1" />
+                Security Features:
+              </strong>
             </p>
             <ul className="mt-2 text-sm text-yellow-700 space-y-1">
               <li>• API keys encrypted with AES-256 encryption</li>
@@ -510,7 +543,10 @@ const ApiSetup: React.FC = () => {
           
           <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
             <p className="text-sm text-blue-800">
-              <strong>💡 Tips:</strong>
+              <strong className="flex items-center">
+                <Icon name="Info" size="sm" className="mr-1" />
+                Tips:
+              </strong>
             </p>
             <ul className="mt-2 text-sm text-blue-700 space-y-1">
               <li>• Use the "Test Connection" button to verify your API key</li>

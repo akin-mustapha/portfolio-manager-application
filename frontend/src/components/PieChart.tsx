@@ -1,4 +1,5 @@
 import React from 'react';
+import { Icon } from './icons';
 
 interface PieChartData {
   name: string;
@@ -45,7 +46,9 @@ const PieChart: React.FC<PieChartProps> = ({
     return (
       <div className="flex items-center justify-center" style={{ height }}>
         <div className="text-center">
-          <div className="text-gray-400 text-4xl mb-2">📊</div>
+          <div className="text-gray-400 mb-2">
+            <Icon name="PieChart" size="2xl" />
+          </div>
           <p className="text-gray-500 font-medium">No portfolio data available</p>
           <p className="text-gray-400 text-sm mt-1">
             Connect your Trading 212 API to view allocation

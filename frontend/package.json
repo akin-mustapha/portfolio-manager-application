@@ -9,6 +9,8 @@
     "@types/react-dom": "^18.0.0",
     "axios": "^1.4.0",
     "clsx": "^1.2.0",
+    "framer-motion": "^12.23.22",
+    "lucide-react": "^0.544.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.8.0",
