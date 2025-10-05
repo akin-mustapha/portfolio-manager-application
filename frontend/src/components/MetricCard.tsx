@@ -34,7 +34,7 @@ const MetricCard: React.FC<MetricCardProps> = ({
 
   if (loading) {
     return (
-      <div className="bg-white rounded-lg shadow p-6">
+      <div className="bg-white/80 backdrop-blur-sm border border-gray-200 rounded-lg shadow-sm p-6 min-h-[140px]">
         <div className="animate-pulse">
           <div className="h-4 bg-gray-200 rounded w-3/4 mb-3"></div>
           <div className="h-8 bg-gray-200 rounded w-1/2 mb-2"></div>
@@ -45,9 +45,9 @@ const MetricCard: React.FC<MetricCardProps> = ({
   }
 
   return (
-    <div className="bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow">
+    <div className="bg-white/80 backdrop-blur-sm border border-gray-200 rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow min-h-[140px] flex flex-col justify-between">
       <div className="flex items-center justify-between mb-2">
-        <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wide">
+        <h3 className="text-sm font-medium text-gray-600 uppercase tracking-wide">
           {title}
         </h3>
         {icon && (

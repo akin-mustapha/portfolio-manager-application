@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 
 # Import routers
-from api.v1.endpoints import auth, portfolio, pies, benchmarks, dividends
+from app.api.v1.endpoints import auth, portfolio, pies, benchmarks, dividends
 
 api_router = APIRouter()
 

@@ -15,8 +15,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
   const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: <Icon name="BarChart" size="sm" /> },
-    { name: 'API Setup', href: '/api-setup', icon: <Icon name="Key" size="sm" /> },
     { name: 'Pie Analysis', href: '/pie-analysis', icon: <Icon name="PieChart" size="sm" /> },
+    { name: 'Performance', href: '/performance', icon: <Icon name="TrendingUp" size="sm" /> },
     { name: 'Settings', href: '/settings', icon: <Icon name="Settings" size="sm" /> },
   ];
 

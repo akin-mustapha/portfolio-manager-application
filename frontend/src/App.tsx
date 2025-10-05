@@ -4,8 +4,9 @@ import { AppProvider } from './contexts/AppContext';
 import { useAuthError } from './hooks/useAuthError';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
-import ApiSetup from './pages/ApiSetup';
+
 import PieAnalysis from './pages/PieAnalysis';
+import PerformanceAnalysis from './pages/PerformanceAnalysis';
 import Settings from './pages/Settings';
 
 import './App.css';
@@ -25,14 +26,15 @@ function AppContent() {
           <Dashboard />
         </Layout>
       } />
-      <Route path="/api-setup" element={
-        <Layout>
-          <ApiSetup />
-        </Layout>
-      } />
+
       <Route path="/pie-analysis" element={
         <Layout>
           <PieAnalysis />
+        </Layout>
+      } />
+      <Route path="/performance" element={
+        <Layout>
+          <PerformanceAnalysis />
         </Layout>
       } />
       <Route path="/settings" element={

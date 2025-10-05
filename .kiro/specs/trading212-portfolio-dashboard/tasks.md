@@ -167,7 +167,7 @@
     - Set up icon accessibility with proper ARIA labels
     - _Requirements: 1.1, 1.2_
 
-  - [ ] 8.3 Create animated metric cards and dashboard components
+  - [x] 8.3 Create animated metric cards and dashboard components
     - Build AnimatedMetricCard with smooth number transitions and hover effects
     - Implement gradient backgrounds and backdrop blur effects
     - Add staggered entrance animations for dashboard grid layouts
@@ -175,7 +175,7 @@
     - Add responsive scaling and micro-interactions
     - _Requirements: 4.1, 3.1, 3.2_
 
-  - [ ] 8.4 Implement interactive performance and risk visualization charts
+  - [x] 8.4 Implement interactive performance and risk visualization charts
     - Create AnimatedTimeSeriesChart with smooth data transitions using Chart.js/Recharts
     - Build InteractiveLineChart for benchmark comparisons with hover tooltips
     - Add AnimatedScatterChart for risk-return analysis with zoom and pan
@@ -183,7 +183,7 @@
     - Add chart interaction animations (hover, click, data updates)
     - _Requirements: 4.1, 5.1, 8.1, 8.5_
 
-  - [ ] 8.5 Build animated allocation and diversification visualizations
+  - [x] 8.5 Build animated allocation and diversification visualizations
     - Create InteractivePieChart with smooth segment transitions and hover effects
     - Build AnimatedDonutChart for sector breakdowns with progressive loading
     - Implement animated top holdings table with sortable columns and row animations

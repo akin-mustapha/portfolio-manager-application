@@ -4,8 +4,8 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 import uvicorn
 
-from core.config import settings
-from api.v1.api import api_router
+from app.core.config import settings
+from app.api.v1.api import api_router
 
 # Create FastAPI application
 app = FastAPI(

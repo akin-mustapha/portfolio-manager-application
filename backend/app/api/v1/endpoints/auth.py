@@ -5,16 +5,16 @@ from fastapi.security import HTTPAuthorizationCredentials
 import redis
 import httpx
 
-from core.deps import get_redis, security, get_current_user_id, get_current_session
-from core.security import (
+from app.core.deps import get_redis, security, get_current_user_id, get_current_session
+from app.core.security import (
     create_access_token, 
     create_refresh_token, 
     verify_refresh_token,
     encrypt_api_key,
     generate_session_id
 )
-from core.config import settings
-from models.auth import (
+from app.core.config import settings
+from app.models.auth import (
     SessionCreate,
     SessionResponse,
     TokenRefresh,

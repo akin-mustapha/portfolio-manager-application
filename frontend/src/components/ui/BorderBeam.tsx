@@ -19,6 +19,8 @@ interface BorderBeamProps {
   reverse?: boolean;
   /** The border width of the beam. */
   borderWidth?: number;
+  /** The size of the beam glow. */
+  size?: number;
 }
 
 export const BorderBeam: React.FC<BorderBeamProps> = ({
@@ -28,9 +30,10 @@ export const BorderBeam: React.FC<BorderBeamProps> = ({
   colorTo = "#3b82f6",
   className,
   reverse = false,
-  borderWidth = 1,
+  borderWidth = 2,
+  size = 100,
 }) => {
-  // Convert hex color to RGB for box-shadow
+  // Convert hex color to RGB for gradients
   const hexToRgb = (hex: string) => {
     const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
     return result ? {
@@ -41,41 +44,125 @@ export const BorderBeam: React.FC<BorderBeamProps> = ({
   };
 
   const rgb = hexToRgb(colorTo);
-  const shadowColor = `${rgb.r}, ${rgb.g}, ${rgb.b}`;
+  const beamColor = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.8)`;
+  const beamColorFade = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0)`;
 
   return (
-    <div className="pointer-events-none absolute inset-0 rounded-[inherit]">
-      {/* Rotating glow effect using box-shadow */}
+    <div className="pointer-events-none absolute inset-0 rounded-[inherit] overflow-hidden">
+      {/* Four separate beams for each edge - cleaner approach */}
+      <div className="absolute inset-0">
+        {/* Top beam */}
+        <motion.div
+          className="absolute top-0 left-0"
+          style={{
+            width: '100%',
+            height: `${borderWidth}px`,
+            background: `linear-gradient(90deg, ${beamColorFade}, ${beamColor}, ${beamColorFade})`,
+            borderRadius: '1px',
+          }}
+          initial={{ scaleX: 0, x: '-100%' }}
+          animate={{
+            scaleX: [0, 1, 1, 0],
+            x: ['-100%', '-100%', '100%', '100%'],
+          }}
+          transition={{
+            duration,
+            delay: reverse ? delay + (duration * 3) / 4 : delay,
+            repeat: Infinity,
+            ease: "easeInOut",
+            times: [0, 0.2, 0.8, 1],
+          }}
+        />
+
+        {/* Right beam */}
+        <motion.div
+          className="absolute top-0 right-0"
+          style={{
+            width: `${borderWidth}px`,
+            height: '100%',
+            background: `linear-gradient(180deg, ${beamColorFade}, ${beamColor}, ${beamColorFade})`,
+            borderRadius: '1px',
+          }}
+          initial={{ scaleY: 0, y: '-100%' }}
+          animate={{
+            scaleY: [0, 1, 1, 0],
+            y: ['-100%', '-100%', '100%', '100%'],
+          }}
+          transition={{
+            duration,
+            delay: reverse ? delay + (duration * 2) / 4 : delay + duration / 4,
+            repeat: Infinity,
+            ease: "easeInOut",
+            times: [0, 0.2, 0.8, 1],
+          }}
+        />
+
+        {/* Bottom beam */}
+        <motion.div
+          className="absolute bottom-0 right-0"
+          style={{
+            width: '100%',
+            height: `${borderWidth}px`,
+            background: `linear-gradient(270deg, ${beamColorFade}, ${beamColor}, ${beamColorFade})`,
+            borderRadius: '1px',
+          }}
+          initial={{ scaleX: 0, x: '100%' }}
+          animate={{
+            scaleX: [0, 1, 1, 0],
+            x: ['100%', '100%', '-100%', '-100%'],
+          }}
+          transition={{
+            duration,
+            delay: reverse ? delay + duration / 4 : delay + (duration * 2) / 4,
+            repeat: Infinity,
+            ease: "easeInOut",
+            times: [0, 0.2, 0.8, 1],
+          }}
+        />
+
+        {/* Left beam */}
+        <motion.div
+          className="absolute bottom-0 left-0"
+          style={{
+            width: `${borderWidth}px`,
+            height: '100%',
+            background: `linear-gradient(0deg, ${beamColorFade}, ${beamColor}, ${beamColorFade})`,
+            borderRadius: '1px',
+          }}
+          initial={{ scaleY: 0, y: '100%' }}
+          animate={{
+            scaleY: [0, 1, 1, 0],
+            y: ['100%', '100%', '-100%', '-100%'],
+          }}
+          transition={{
+            duration,
+            delay: reverse ? delay : delay + (duration * 3) / 4,
+            repeat: Infinity,
+            ease: "easeInOut",
+            times: [0, 0.2, 0.8, 1],
+          }}
+        />
+      </div>
+
+      {/* Subtle glow effect */}
       <motion.div
-        className={cn(
-          "absolute inset-0 rounded-[inherit]",
-          className
-        )}
+        className="absolute inset-0 rounded-[inherit]"
         style={{
-          boxShadow: `
-            0 0 20px rgba(${shadowColor}, 0.3),
-            0 0 40px rgba(${shadowColor}, 0.2),
-            0 0 60px rgba(${shadowColor}, 0.1),
-            inset 0 0 0 ${borderWidth}px rgba(${shadowColor}, 0.4)
-          `,
-          background: 'transparent',
+          boxShadow: `0 0 10px rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.2)`,
         }}
         animate={{
           boxShadow: [
-            `0 0 20px rgba(${shadowColor}, 0.3), 0 0 40px rgba(${shadowColor}, 0.2), 0 0 60px rgba(${shadowColor}, 0.1), inset 0 0 0 ${borderWidth}px rgba(${shadowColor}, 0.4)`,
-            `0 0 30px rgba(${shadowColor}, 0.5), 0 0 60px rgba(${shadowColor}, 0.3), 0 0 90px rgba(${shadowColor}, 0.2), inset 0 0 0 ${borderWidth}px rgba(${shadowColor}, 0.6)`,
-            `0 0 20px rgba(${shadowColor}, 0.3), 0 0 40px rgba(${shadowColor}, 0.2), 0 0 60px rgba(${shadowColor}, 0.1), inset 0 0 0 ${borderWidth}px rgba(${shadowColor}, 0.4)`,
+            `0 0 10px rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.1)`,
+            `0 0 20px rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.3)`,
+            `0 0 10px rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.1)`,
           ],
         }}
         transition={{
-          duration,
-          delay,
+          duration: duration / 2,
           repeat: Infinity,
           ease: "easeInOut",
         }}
       />
-      
-
     </div>
   );
 };

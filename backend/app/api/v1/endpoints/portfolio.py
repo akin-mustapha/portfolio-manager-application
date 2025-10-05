@@ -4,13 +4,13 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 import asyncio
 
-from core.deps import get_trading212_api_key, get_current_user_id, get_redis
-from services.trading212_service import Trading212Service, Trading212APIError
-from services.calculations_service import CalculationsService
-from models.portfolio import Portfolio, PortfolioMetrics
-from models.position import Position
-from models.pie import Pie
-from models.historical import HistoricalData
+from app.core.deps import get_trading212_api_key, get_current_user_id, get_redis
+from app.services.trading212_service import Trading212Service, Trading212APIError
+from app.services.calculations_service import CalculationsService
+from app.models.portfolio import Portfolio, PortfolioMetrics
+from app.models.position import Position
+from app.models.pie import Pie
+from app.models.historical import HistoricalData
 import redis
 
 router = APIRouter()

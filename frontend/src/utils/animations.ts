@@ -210,3 +210,77 @@ export const createNumberAnimation = (
     ease: 'easeOut',
   },
 });
+
+// Stagger animation utilities
+export const staggerConfigs = {
+  // Container for staggered children
+  container: {
+    initial: {},
+    animate: {
+      transition: {
+        staggerChildren: 0.1,
+        delayChildren: 0.1,
+      },
+    },
+    exit: {
+      transition: {
+        staggerChildren: 0.05,
+        staggerDirection: -1,
+      },
+    },
+  },
+  
+  // Fast stagger for quick animations
+  fast: {
+    initial: {},
+    animate: {
+      transition: {
+        staggerChildren: 0.05,
+        delayChildren: 0.05,
+      },
+    },
+  },
+  
+  // Slow stagger for dramatic effect
+  slow: {
+    initial: {},
+    animate: {
+      transition: {
+        staggerChildren: 0.2,
+        delayChildren: 0.2,
+      },
+    },
+  },
+} as const;
+
+// Chart-specific animation configurations
+export const chartAnimations = {
+  // Line chart path animation
+  linePath: {
+    initial: { pathLength: 0, opacity: 0 },
+    animate: { pathLength: 1, opacity: 1 },
+    transition: { duration: 1.5, ease: 'easeInOut' },
+  },
+  
+  // Bar chart animation
+  bar: {
+    initial: { scaleY: 0, originY: 1 },
+    animate: { scaleY: 1 },
+    transition: springTransition,
+  },
+  
+  // Pie chart segment animation
+  pieSegment: {
+    initial: { scale: 0, opacity: 0 },
+    animate: { scale: 1, opacity: 1 },
+    transition: { ...springTransition, delay: 0.1 },
+  },
+  
+  // Data point animation
+  dataPoint: {
+    initial: { scale: 0, opacity: 0 },
+    animate: { scale: 1, opacity: 1 },
+    whileHover: { scale: 1.2 },
+    transition: bounceTransition,
+  },
+} as const;
