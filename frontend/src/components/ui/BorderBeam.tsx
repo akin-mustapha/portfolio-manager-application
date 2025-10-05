@@ -1,65 +1,81 @@
+"use client";
+
 import React from 'react';
+import { motion } from 'framer-motion';
 import { cn } from '../../utils/ui';
 
 interface BorderBeamProps {
-  className?: string;
-  size?: number;
+  /** The duration of the border beam. */
   duration?: number;
+  /** The delay of the border beam. */
   delay?: number;
-  borderWidth?: number;
-  anchor?: number;
+  /** The color of the border beam from. */
   colorFrom?: string;
-  colorVia?: string;
+  /** The color of the border beam to. */
   colorTo?: string;
+  /** The class name of the border beam. */
+  className?: string;
+  /** Whether to reverse the animation direction. */
   reverse?: boolean;
+  /** The border width of the beam. */
+  borderWidth?: number;
 }
 
 export const BorderBeam: React.FC<BorderBeamProps> = ({
-  className,
-  size = 200,
-  duration = 15,
-  anchor = 90,
-  borderWidth = 1.5,
-  colorFrom = "transparent",
-  colorVia = "rgb(34, 197, 94)",
-  colorTo = "transparent",
+  duration = 4,
   delay = 0,
+  colorFrom = "transparent",
+  colorTo = "#3b82f6",
+  className,
   reverse = false,
+  borderWidth = 1,
 }) => {
+  // Convert hex color to RGB for box-shadow
+  const hexToRgb = (hex: string) => {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result ? {
+      r: parseInt(result[1], 16),
+      g: parseInt(result[2], 16),
+      b: parseInt(result[3], 16)
+    } : { r: 59, g: 130, b: 246 }; // Default blue
+  };
+
+  const rgb = hexToRgb(colorTo);
+  const shadowColor = `${rgb.r}, ${rgb.g}, ${rgb.b}`;
+
   return (
-    <div
-      className={cn(
-        "pointer-events-none absolute inset-0 rounded-[inherit] [border:calc(var(--border-width)*1px)_solid_transparent]",
-        className
-      )}
-      style={
-        {
-          "--border-width": borderWidth,
-          "--border-radius": "inherit",
-        } as React.CSSProperties
-      }
-    >
-      <div
-        className="absolute inset-0 rounded-[inherit] [border:inherit] [mask:linear-gradient(transparent,transparent),conic-gradient(from_calc(var(--border-angle)*1deg),transparent_0,var(--color-from)_12.5%,var(--color-via)_25%,var(--color-to)_37.5%,transparent_50%)] [mask-composite:intersect]"
-        style={
-          {
-            "--color-from": colorFrom,
-            "--color-via": colorVia,
-            "--color-to": colorTo,
-            "--border-angle": "0deg",
-            animation: `border-beam ${duration}s linear infinite ${delay}s ${
-              reverse ? "reverse" : ""
-            }`,
-          } as React.CSSProperties
-        }
+    <div className="pointer-events-none absolute inset-0 rounded-[inherit]">
+      {/* Rotating glow effect using box-shadow */}
+      <motion.div
+        className={cn(
+          "absolute inset-0 rounded-[inherit]",
+          className
+        )}
+        style={{
+          boxShadow: `
+            0 0 20px rgba(${shadowColor}, 0.3),
+            0 0 40px rgba(${shadowColor}, 0.2),
+            0 0 60px rgba(${shadowColor}, 0.1),
+            inset 0 0 0 ${borderWidth}px rgba(${shadowColor}, 0.4)
+          `,
+          background: 'transparent',
+        }}
+        animate={{
+          boxShadow: [
+            `0 0 20px rgba(${shadowColor}, 0.3), 0 0 40px rgba(${shadowColor}, 0.2), 0 0 60px rgba(${shadowColor}, 0.1), inset 0 0 0 ${borderWidth}px rgba(${shadowColor}, 0.4)`,
+            `0 0 30px rgba(${shadowColor}, 0.5), 0 0 60px rgba(${shadowColor}, 0.3), 0 0 90px rgba(${shadowColor}, 0.2), inset 0 0 0 ${borderWidth}px rgba(${shadowColor}, 0.6)`,
+            `0 0 20px rgba(${shadowColor}, 0.3), 0 0 40px rgba(${shadowColor}, 0.2), 0 0 60px rgba(${shadowColor}, 0.1), inset 0 0 0 ${borderWidth}px rgba(${shadowColor}, 0.4)`,
+          ],
+        }}
+        transition={{
+          duration,
+          delay,
+          repeat: Infinity,
+          ease: "easeInOut",
+        }}
       />
-      <style jsx>{`
-        @keyframes border-beam {
-          to {
-            --border-angle: 360deg;
-          }
-        }
-      `}</style>
+      
+
     </div>
   );
 };
