@@ -7,7 +7,7 @@ import MetricCard from '../components/MetricCard';
 import PieChart from '../components/PieChart';
 import PieList from '../components/PieList';
 import ConnectionStatus from '../components/ConnectionStatus';
-import AuthTest from '../components/AuthTest';
+
 import { Icon } from '../components/icons';
 import { Pie, Portfolio } from '../types';
 
@@ -80,7 +80,7 @@ const Dashboard: React.FC = () => {
 
   // Show sample data if not authenticated or no Trading 212 connection
   if (!auth.isAuthenticated || !auth.hasTrading212Connection) {
-    // Sample portfolio data for demo purposes
+    // Sample portfolio data for preview
     const samplePortfolio = {
       totalValue: 125430.50,
       totalInvested: 100000.00,
@@ -130,7 +130,7 @@ const Dashboard: React.FC = () => {
 
     return (
       <div className="space-y-6">
-        {/* Header with demo notice */}
+        {/* Header with connection notice */}
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
           <div className="flex items-center">
             <div className="text-blue-400 mr-3">
@@ -138,10 +138,10 @@ const Dashboard: React.FC = () => {
             </div>
             <div className="flex-1">
               <h2 className="text-2xl font-bold text-blue-900 mb-2">
-                Portfolio Overview (Demo Mode)
+                Portfolio Overview
               </h2>
               <p className="text-blue-700 mb-4">
-                Welcome to your Trading 212 Portfolio Dashboard. This is showing sample data for demonstration purposes.
+                Welcome to your Trading 212 Portfolio Dashboard. Connect your API to view your real portfolio data.
                 {!auth.isAuthenticated
                   ? ' Create a session and connect your Trading 212 API to view real data.'
                   : ' Connect your Trading 212 API to view your actual portfolio data.'
@@ -284,13 +284,7 @@ const Dashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Debug information in development */}
-        {process.env.NODE_ENV === 'development' && (
-          <div className="bg-gray-50 rounded-lg p-4">
-            <h4 className="font-medium text-gray-900 mb-2">Development Info</h4>
-            <AuthTest />
-          </div>
-        )}
+
       </div>
     );
   }
@@ -408,11 +402,7 @@ const Dashboard: React.FC = () => {
             <p className="text-gray-500 mb-6">
               Your Trading 212 connection is set up. Click "Fetch Data" below to load your portfolio information.
             </p>
-            {process.env.NODE_ENV === 'development' && (
-              <div className="mb-6">
-                <AuthTest />
-              </div>
-            )}
+
             <div className="flex justify-center space-x-3">
               <Link
                 to="/api-setup"

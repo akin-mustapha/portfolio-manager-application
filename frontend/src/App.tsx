@@ -7,8 +7,7 @@ import Dashboard from './pages/Dashboard';
 import ApiSetup from './pages/ApiSetup';
 import PieAnalysis from './pages/PieAnalysis';
 import Settings from './pages/Settings';
-import AnimationDemo from './components/AnimationDemo';
-import PortfolioOverview from './components/PortfolioOverview';
+
 import './App.css';
 
 function AppContent() {
@@ -26,7 +25,6 @@ function AppContent() {
           <Dashboard />
         </Layout>
       } />
-      <Route path="/portfolio" element={<PortfolioOverview />} />
       <Route path="/api-setup" element={
         <Layout>
           <ApiSetup />
@@ -42,7 +40,7 @@ function AppContent() {
           <Settings />
         </Layout>
       } />
-      <Route path="/animation-demo" element={<AnimationDemo />} />
+
     </Routes>
   );
 }

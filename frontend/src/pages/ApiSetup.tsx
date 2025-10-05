@@ -558,17 +558,7 @@ const ApiSetup: React.FC = () => {
         </div>
       </div>
 
-      {/* Token Information (for debugging in development) */}
-      {process.env.NODE_ENV === 'development' && auth.isAuthenticated && (
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-          <h4 className="text-sm font-medium text-gray-800 mb-2">Debug Information</h4>
-          <div className="text-xs text-gray-600 space-y-1">
-            <div>Session ID: {auth.authState.sessionId}</div>
-            <div>Token Expires: {auth.authState.tokenExpiresAt?.toLocaleString()}</div>
-            <div>Token Expired: {auth.isTokenExpired() ? 'Yes' : 'No'}</div>
-          </div>
-        </div>
-      )}
+
     </div>
   );
 };
